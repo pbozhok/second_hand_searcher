@@ -522,17 +522,32 @@ async def fetch_description_dba(listing: Listing) -> None:
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             
-            # Try to find description in various places
-            desc_elem = soup.find("div", class_=re.compile(r"description|excerpt|summary", re.I))
-            if not desc_elem:
-                desc_elem = soup.find(["p", "div"], attrs={"data-testid": re.compile(r"description", re.I)})
+            text = ""
             
-            if desc_elem:
-                text = desc_elem.get_text(strip=True)
-                if text and len(text) > 10:
-                    listing.description = text[:500]  # Limit to 500 chars
-                    if args.debug:
-                        console.print(f"  [dim]DBA desc: {text[:100]}...[/dim]")
+            # Try JSON-LD script tag first (DBA serves description here)
+            script = soup.find("script", type="application/ld+json")
+            if script:
+                import json
+                try:
+                    data = json.loads(script.string)
+                    text = data.get("description", "") or ""
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            
+            # Fallback to div-based selectors
+            if not text or len(text) <= 10:
+                desc_elem = soup.find("div", class_=re.compile(r"description|excerpt|summary", re.I))
+                if desc_elem:
+                    text = desc_elem.get_text(strip=True)
+                elif not text:
+                    desc_elem = soup.find(["p", "div"], attrs={"data-testid": re.compile(r"description", re.I)})
+                    if desc_elem:
+                        text = desc_elem.get_text(strip=True)
+            
+            if text and len(text) > 10:
+                listing.description = text[:500]  # Limit to 500 chars
+                if args.debug:
+                    console.print(f"  [dim]DBA desc: {text[:100]}...[/dim]")
     except Exception as e:
         if args.debug:
             console.print(f"  [dim]DBA desc fetch error: {e}[/dim]")
@@ -577,17 +592,32 @@ async def fetch_description_vinted(listing: Listing) -> None:
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             
-            # Vinted typically has description in a specific section
-            desc_elem = soup.find("div", attrs={"data-testid": re.compile(r"item.*description", re.I)})
-            if not desc_elem:
-                desc_elem = soup.find("div", class_=re.compile(r"description", re.I))
+            text = ""
             
-            if desc_elem:
-                text = desc_elem.get_text(strip=True)
-                if text and len(text) > 10:
-                    listing.description = text[:500]
-                    if args.debug:
-                        console.print(f"  [dim]Vinted desc: {text[:100]}...[/dim]")
+            # Try JSON-LD script tag first (Vinted serves description here)
+            script = soup.find("script", type="application/ld+json")
+            if script:
+                import json
+                try:
+                    data = json.loads(script.string)
+                    text = data.get("description", "") or ""
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            
+            # Fallback to div-based selectors
+            if not text or len(text) <= 10:
+                desc_elem = soup.find("div", attrs={"data-testid": re.compile(r"item.*description", re.I)})
+                if desc_elem:
+                    text = desc_elem.get_text(strip=True)
+                elif not text:
+                    desc_elem = soup.find("div", class_=re.compile(r"description", re.I))
+                    if desc_elem:
+                        text = desc_elem.get_text(strip=True)
+            
+            if text and len(text) > 10:
+                listing.description = text[:500]
+                if args.debug:
+                    console.print(f"  [dim]Vinted desc: {text[:100]}...[/dim]")
     except Exception as e:
         if args.debug:
             console.print(f"  [dim]Vinted desc fetch error: {e}[/dim]")
@@ -660,8 +690,10 @@ async def score_and_rank(listings: list[Listing], user_query: str) -> list[Listi
 Score each of the following second-hand listings from 1 to 10 based on:
 - Value for money (price vs. typical market price)
 - How well it matches the user's stated need
-- Condition and quality indicators from the description (mentions of damage, original packaging, etc.)
+- Condition and quality indicators from the title AND description (mentions of new/unused, damage, original packaging, accessories included, etc.)
 - Review quality (positive reviews = higher score)
+
+Pay special attention to the description field which contains important details about the item's condition and what's included.
 
 Return ONLY a JSON object:
 {{"scores": [{{"id": 0, "score": 7.5, "reason": "one sentence"}}]}}

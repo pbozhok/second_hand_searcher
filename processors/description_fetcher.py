@@ -35,17 +35,32 @@ class DescriptionFetcher:
                 resp.raise_for_status()
                 soup = BeautifulSoup(resp.text, "html.parser")
                 
-                # Try to find description in various places
-                desc_elem = soup.find("div", class_=re.compile(r"description|excerpt|summary", re.I))
-                if not desc_elem:
-                    desc_elem = soup.find(["p", "div"], attrs={"data-testid": re.compile(r"description", re.I)})
+                text = ""
                 
-                if desc_elem:
-                    text = desc_elem.get_text(strip=True)
-                    if text and len(text) > 10:
-                        listing.description = text[:500]  # Limit to 500 chars
-                        if self.debug:
-                            console.print(f"  [dim]DBA desc: {text[:100]}...[/dim]")
+                # Try JSON-LD script tag first (DBA serves description here)
+                script = soup.find("script", type="application/ld+json")
+                if script:
+                    import json
+                    try:
+                        data = json.loads(script.string)
+                        text = data.get("description", "") or ""
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                
+                # Fallback to div-based selectors
+                if not text or len(text) <= 10:
+                    desc_elem = soup.find("div", class_=re.compile(r"description|excerpt|summary", re.I))
+                    if desc_elem:
+                        text = desc_elem.get_text(strip=True)
+                    elif not text:
+                        desc_elem = soup.find(["p", "div"], attrs={"data-testid": re.compile(r"description", re.I)})
+                        if desc_elem:
+                            text = desc_elem.get_text(strip=True)
+                
+                if text and len(text) > 10:
+                    listing.description = text[:500]  # Limit to 500 chars
+                    if self.debug:
+                        console.print(f"  [dim]DBA desc: {text[:100]}...[/dim]")
         except Exception as e:
             if self.debug:
                 console.print(f"  [dim]DBA desc fetch error: {e}[/dim]")
@@ -88,17 +103,32 @@ class DescriptionFetcher:
                 resp.raise_for_status()
                 soup = BeautifulSoup(resp.text, "html.parser")
                 
-                # Vinted typically has description in a specific section
-                desc_elem = soup.find("div", attrs={"data-testid": re.compile(r"item.*description", re.I)})
-                if not desc_elem:
-                    desc_elem = soup.find("div", class_=re.compile(r"description", re.I))
+                text = ""
                 
-                if desc_elem:
-                    text = desc_elem.get_text(strip=True)
-                    if text and len(text) > 10:
-                        listing.description = text[:500]
-                        if self.debug:
-                            console.print(f"  [dim]Vinted desc: {text[:100]}...[/dim]")
+                # Try JSON-LD script tag first (Vinted serves description here)
+                script = soup.find("script", type="application/ld+json")
+                if script:
+                    import json
+                    try:
+                        data = json.loads(script.string)
+                        text = data.get("description", "") or ""
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                
+                # Fallback to div-based selectors
+                if not text or len(text) <= 10:
+                    desc_elem = soup.find("div", attrs={"data-testid": re.compile(r"item.*description", re.I)})
+                    if desc_elem:
+                        text = desc_elem.get_text(strip=True)
+                    elif not text:
+                        desc_elem = soup.find("div", class_=re.compile(r"description", re.I))
+                        if desc_elem:
+                            text = desc_elem.get_text(strip=True)
+                
+                if text and len(text) > 10:
+                    listing.description = text[:500]
+                    if self.debug:
+                        console.print(f"  [dim]Vinted desc: {text[:100]}...[/dim]")
         except Exception as e:
             if self.debug:
                 console.print(f"  [dim]Vinted desc fetch error: {e}[/dim]")

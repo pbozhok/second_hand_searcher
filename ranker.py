@@ -80,8 +80,10 @@ class Ranker:
 Score each of the following second-hand listings from 1 to 10 based on:
 - Value for money (price vs. typical market price)
 - How well it matches the user's stated need
-- Condition and quality indicators from the description (mentions of damage, original packaging, etc.)
+- Condition and quality indicators from the title AND description (mentions of new/unused, damage, original packaging, accessories included, etc.)
 - Review quality (positive reviews = higher score)
+
+Pay special attention to the description field which contains important details about the item's condition and what's included.
 
 Return ONLY a JSON object:
 {{"scores": [{{"id": 0, "score": 7.5, "reason": "one sentence"}}]}}
