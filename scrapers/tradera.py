@@ -120,6 +120,17 @@ class TraderaScraper(BaseScraper):
                     if desc_el:
                         description = desc_el.get_text(strip=True)[:300]
 
+                    # Date posted: try to extract from the card
+                    date_posted = ""
+                    date_el = card.select_one('[class*="date"], [class*="time"], [class*="posted"], [class*="published"], [class*="ends"]')
+                    if date_el:
+                        date_posted = date_el.get_text(strip=True)
+                    else:
+                        # Try to find time tag
+                        time_el = card.find("time")
+                        if time_el:
+                            date_posted = time_el.get("datetime", time_el.get_text(strip=True))
+
                     listings.append(Listing(
                         title=title,
                         price=price,
@@ -127,6 +138,7 @@ class TraderaScraper(BaseScraper):
                         url=full_url,
                         description=description,
                         platform=self.platform,
+                        date_posted=date_posted,
                     ))
 
             except Exception as e:

@@ -25,3 +25,4 @@ class Listing:
     review_links: list[str] = field(default_factory=list)
     score: float = 0.0
     score_reason: str = ""
+    date_posted: str = ""

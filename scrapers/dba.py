@@ -132,6 +132,39 @@ class DBAScraper(BaseScraper):
                         if desc_el:
                             description = desc_el.get_text(strip=True)[:300]
 
+                    # Date posted: try to extract from the card's article container
+                    date_posted = ""
+                    # Find the article ancestor which contains the date
+                    article = card.find_parent('article')
+                    if article:
+                        article_text = article.get_text()
+                        # Look for relative date patterns like "Nyt i dag", "2 dage", "8 t.", etc.
+                        # t. = timer (hours), d. = dage (days)
+                        date_match = re.search(r'(Nyt i (dag|g\u00e5r)|(\d+)\s*(dage?|d\.|uge(r)?|m\u00e5ned(er)?|t\.)|Oprettet\s*:?\s*(\S+))', article_text, re.I)
+                        if date_match:
+                            date_posted = date_match.group(0).strip()
+                            # Clean up the date text
+                            date_posted = re.sub(r'\s+', ' ', date_posted)
+                        else:
+                            # Try looking for date elements
+                            date_el = article.select_one('[class*="date"], [class*="time"], [class*="posted"], [class*="published"], [class*="oprettet"]')
+                            if date_el:
+                                date_posted = date_el.get_text(strip=True)
+                            else:
+                                # Try time tag
+                                time_el = article.find("time")
+                                if time_el:
+                                    date_posted = time_el.get("datetime", time_el.get_text(strip=True))
+                    elif card.parent:
+                        # Fallback to parent
+                        date_el = card.parent.select_one('[class*="date"], [class*="time"], [class*="posted"], [class*="published"], [class*="oprettet"]')
+                        if date_el:
+                            date_posted = date_el.get_text(strip=True)
+                        else:
+                            time_el = card.parent.find("time")
+                            if time_el:
+                                date_posted = time_el.get("datetime", time_el.get_text(strip=True))
+
                     listings.append(Listing(
                         title=title,
                         price=price,
@@ -139,6 +172,7 @@ class DBAScraper(BaseScraper):
                         url=full_url,
                         description=description,
                         platform=self.platform,
+                        date_posted=date_posted,
                     ))
 
             except Exception as e:

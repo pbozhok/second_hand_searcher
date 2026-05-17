@@ -531,6 +531,11 @@ async def fetch_description_dba(listing: Listing) -> None:
                 try:
                     data = json.loads(script.string)
                     text = data.get("description", "") or ""
+                    # Try to get date from JSON-LD
+                    if not listing.date_posted:
+                        date_str = data.get("datePosted", "") or data.get("datePublished", "") or data.get("dateCreated", "")
+                        if date_str:
+                            listing.date_posted = date_str.split("T")[0]  # Keep only date part
                 except (json.JSONDecodeError, AttributeError):
                     pass
             
@@ -543,6 +548,21 @@ async def fetch_description_dba(listing: Listing) -> None:
                     desc_elem = soup.find(["p", "div"], attrs={"data-testid": re.compile(r"description", re.I)})
                     if desc_elem:
                         text = desc_elem.get_text(strip=True)
+            
+            # Try to extract date from the page
+            if not listing.date_posted:
+                date_el = soup.find(["span", "div", "time"], class_=re.compile(r"date|time|posted|published|oprettet|dato", re.I))
+                if date_el:
+                    date_text = date_el.get_text(strip=True)
+                    # Clean up date text (remove "Oprettet", "Posted", etc.)
+                    date_text = re.sub(r'^(Oprettet|Posted|Created|Dato):?\s*', '', date_text, flags=re.I)
+                    if date_text and len(date_text) < 50:
+                        listing.date_posted = date_text
+                else:
+                    # Try time tag
+                    time_el = soup.find("time")
+                    if time_el:
+                        listing.date_posted = time_el.get("datetime", "").split("T")[0]
             
             if text and len(text) > 10:
                 listing.description = text[:500]  # Limit to 500 chars
@@ -575,6 +595,19 @@ async def fetch_description_tradera(listing: Listing) -> None:
                     listing.description = text[:500]
                     if args.debug:
                         console.print(f"  [dim]Tradera desc: {text[:100]}...[/dim]")
+            
+            # Try to extract date from the page
+            if not listing.date_posted:
+                date_el = soup.find(["span", "div", "time"], class_=re.compile(r"date|time|posted|published|skapat|upp skapad", re.I))
+                if date_el:
+                    date_text = date_el.get_text(strip=True)
+                    date_text = re.sub(r'^(Publicerad|Skapad|Posted|Created):?\s*', '', date_text, flags=re.I)
+                    if date_text and len(date_text) < 50:
+                        listing.date_posted = date_text
+                else:
+                    time_el = soup.find("time")
+                    if time_el:
+                        listing.date_posted = time_el.get("datetime", "").split("T")[0]
     except Exception as e:
         if args.debug:
             console.print(f"  [dim]Tradera desc fetch error: {e}[/dim]")
@@ -601,6 +634,11 @@ async def fetch_description_vinted(listing: Listing) -> None:
                 try:
                     data = json.loads(script.string)
                     text = data.get("description", "") or ""
+                    # Try to get date from JSON-LD
+                    if not listing.date_posted:
+                        date_str = data.get("datePosted", "") or data.get("datePublished", "") or data.get("dateCreated", "")
+                        if date_str:
+                            listing.date_posted = date_str.split("T")[0]
                 except (json.JSONDecodeError, AttributeError):
                     pass
             
@@ -613,6 +651,19 @@ async def fetch_description_vinted(listing: Listing) -> None:
                     desc_elem = soup.find("div", class_=re.compile(r"description", re.I))
                     if desc_elem:
                         text = desc_elem.get_text(strip=True)
+            
+            # Try to extract date from the page
+            if not listing.date_posted:
+                date_el = soup.find(["span", "div", "time"], class_=re.compile(r"date|time|posted|published|oprettet|dato", re.I))
+                if date_el:
+                    date_text = date_el.get_text(strip=True)
+                    date_text = re.sub(r'^(Oprettet|Posted|Created|Dato):?\s*', '', date_text, flags=re.I)
+                    if date_text and len(date_text) < 50:
+                        listing.date_posted = date_text
+                else:
+                    time_el = soup.find("time")
+                    if time_el:
+                        listing.date_posted = time_el.get("datetime", "").split("T")[0]
             
             if text and len(text) > 10:
                 listing.description = text[:500]
@@ -753,6 +804,8 @@ def display_results(listings: list[Listing], user_query: str, skip_reviews: bool
         table.add_row("Score",   f"{listing.score:.1f} / 10")
         if listing.score_reason:
             table.add_row("Reason",  listing.score_reason)
+        if listing.date_posted:
+            table.add_row("Posted",  listing.date_posted)
         if not skip_reviews and listing.product_model:
             table.add_row("Model",   listing.product_model)
         table.add_row("Link",    listing.url)

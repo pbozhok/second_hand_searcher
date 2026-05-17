@@ -57,6 +57,20 @@ class DescriptionFetcher:
                         if desc_elem:
                             text = desc_elem.get_text(strip=True)
                 
+                # Try to extract date from the page
+                if not listing.date_posted:
+                    date_el = soup.find(["span", "div", "time"], class_=re.compile(r"date|time|posted|published|oprettet|dato", re.I))
+                    if date_el:
+                        import re
+                        date_text = date_el.get_text(strip=True)
+                        date_text = re.sub(r'^(Oprettet|Posted|Created|Dato):?\s*', '', date_text, flags=re.I)
+                        if date_text and len(date_text) < 50:
+                            listing.date_posted = date_text
+                    else:
+                        time_el = soup.find("time")
+                        if time_el:
+                            listing.date_posted = time_el.get("datetime", "").split("T")[0]
+                
                 if text and len(text) > 10:
                     listing.description = text[:500]  # Limit to 500 chars
                     if self.debug:
@@ -87,6 +101,20 @@ class DescriptionFetcher:
                         listing.description = text[:500]
                         if self.debug:
                             console.print(f"  [dim]Tradera desc: {text[:100]}...[/dim]")
+            
+            # Try to extract date from the page
+            if not listing.date_posted:
+                import re
+                date_el = soup.find(["span", "div", "time"], class_=re.compile(r"date|time|posted|published|skapat|upp skapad", re.I))
+                if date_el:
+                    date_text = date_el.get_text(strip=True)
+                    date_text = re.sub(r'^(Publicerad|Skapad|Posted|Created):?\s*', '', date_text, flags=re.I)
+                    if date_text and len(date_text) < 50:
+                        listing.date_posted = date_text
+                else:
+                    time_el = soup.find("time")
+                    if time_el:
+                        listing.date_posted = time_el.get("datetime", "").split("T")[0]
         except Exception as e:
             if self.debug:
                 console.print(f"  [dim]Tradera desc fetch error: {e}[/dim]")
@@ -112,6 +140,11 @@ class DescriptionFetcher:
                     try:
                         data = json.loads(script.string)
                         text = data.get("description", "") or ""
+                        # Try to get date from JSON-LD
+                        if not listing.date_posted:
+                            date_str = data.get("datePosted", "") or data.get("datePublished", "") or data.get("dateCreated", "")
+                            if date_str:
+                                listing.date_posted = date_str.split("T")[0]
                     except (json.JSONDecodeError, AttributeError):
                         pass
                 
@@ -124,6 +157,20 @@ class DescriptionFetcher:
                         desc_elem = soup.find("div", class_=re.compile(r"description", re.I))
                         if desc_elem:
                             text = desc_elem.get_text(strip=True)
+                
+                # Try to extract date from the page
+                if not listing.date_posted:
+                    import re
+                    date_el = soup.find(["span", "div", "time"], class_=re.compile(r"date|time|posted|published|oprettet|dato", re.I))
+                    if date_el:
+                        date_text = date_el.get_text(strip=True)
+                        date_text = re.sub(r'^(Oprettet|Posted|Created|Dato):?\s*', '', date_text, flags=re.I)
+                        if date_text and len(date_text) < 50:
+                            listing.date_posted = date_text
+                    else:
+                        time_el = soup.find("time")
+                        if time_el:
+                            listing.date_posted = time_el.get("datetime", "").split("T")[0]
                 
                 if text and len(text) > 10:
                     listing.description = text[:500]

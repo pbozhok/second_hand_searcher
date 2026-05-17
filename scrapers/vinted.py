@@ -69,7 +69,23 @@ class VintedScraper(BaseScraper):
                     currency    = item.currency or "DKK"
                     url         = item.url or ""
                     description = item.description or ""
-
+                    
+                    # Try to extract date from json_data
+                    date_posted = ""
+                    json_data = getattr(item, 'json_data', {})
+                    if json_data:
+                        # Check for timestamp in photos[0]['high_resolution']['timestamp']
+                        if 'photos' in json_data and json_data['photos']:
+                            first_photo = json_data['photos'][0]
+                            if 'high_resolution' in first_photo and isinstance(first_photo['high_resolution'], dict):
+                                timestamp = first_photo['high_resolution'].get('timestamp')
+                                if timestamp:
+                                    import datetime
+                                    date_posted = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')
+                            elif 'timestamp' in first_photo:
+                                import datetime
+                                date_posted = datetime.datetime.fromtimestamp(first_photo['timestamp']).strftime('%Y-%m-%d')
+                    
                     listings.append(Listing(
                         title=title,
                         price=price,
@@ -77,6 +93,7 @@ class VintedScraper(BaseScraper):
                         url=url,
                         description=description,
                         platform=self.platform,
+                        date_posted=date_posted,
                     ))
                 except AttributeError as e:
                     self.log_debug(f"[yellow]Vinted item parse error (skipping): {e}[/yellow]")
