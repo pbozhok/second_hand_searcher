@@ -155,6 +155,7 @@ async def filter_listings_simple(listings: list[Listing], user_query: str) -> li
     """
     keywords = user_query.lower().split()
     relevant_listings = []
+    discarded_count = 0
     
     for listing in listings:
         text = (listing.title + " " + listing.description).lower()
@@ -165,7 +166,14 @@ async def filter_listings_simple(listings: list[Listing], user_query: str) -> li
             listing.relevant = True
             listing.relevance_reason = f"Contains {matches}/{len(keywords)} search keywords"
             relevant_listings.append(listing)
+        else:
+            listing.relevant = False
+            listing.relevance_reason = f"Only {matches}/{len(keywords)} keywords"
+            console.print(f"  [red]✗ {listing.title}: {listing.relevance_reason}[/red]")
+            discarded_count += 1
     
+    if discarded_count > 0:
+        console.print(f"[bold yellow]{discarded_count} listings discarded[/bold yellow]")
     console.print(f"[bold green]{len(relevant_listings)} relevant listings kept (keyword-based)[/bold green]\n")
     
     if not relevant_listings:
@@ -208,10 +216,10 @@ async def filter_listings(
 
 Below is a JSON list of second-hand listings. For each one decide:
 - relevant: true or false
-- reason: one sentence explaining why
+- reason: 2-3 words maximum explaining why (e.g., "not phone", "wrong brand", "accessory only")
 
 A listing is relevant if it matches the user's query closely in terms of product type, brand, or features.
-Eg. if the user is looking for "iPhone 12 with good camera", a listing titled "iPhone 12 Pro Max - Excellent Camera" would be relevant, while "iPhone 12 case" would be not relevant.
+Eg. if the user is looking for "iPhone 12 with good camera", a listing titled "iPhone 12 Pro Max - Excellent Camera" would be relevant, while "iPhone 12 case" would be not relevant with reason "case only".
 
 Return ONLY a JSON object in this exact format:
 {{"results": [{{"id": 0, "relevant": true, "reason": "..."}}]}}
@@ -223,7 +231,6 @@ Listings:
             try:
                 raw_response = await gemini_chat(prompt)
                 parsed_response = extract_json(raw_response)
-                console.print(f"[blue]Parsed response:[/blue] {parsed_response}")
 
                 if isinstance(parsed_response, dict):
                     verdicts = parsed_response.get("results", [])
@@ -237,8 +244,10 @@ Listings:
                     if idx is not None and 0 <= idx < len(batch):
                         batch[idx].relevant = verdict.get("relevant", False)
                         batch[idx].relevance_reason = verdict.get("reason", "")
+                        # Print discarded listings immediately
+                        if not batch[idx].relevant and batch[idx].relevance_reason:
+                            console.print(f"  [red]✗ {batch[idx].title}: {batch[idx].relevance_reason}[/red]")
 
-                console.print(f"[green]Batch results:[/green] {[(listing.title, listing.relevant) for listing in batch]}")
                 return
 
             except httpx.HTTPStatusError as e:
@@ -261,12 +270,17 @@ Listings:
                     await asyncio.sleep(wait_time)
 
     total_batches = (len(listings) + batch_size - 1) // batch_size
+    total_discarded = 0
 
     for i in range(0, len(listings), batch_size):
         batch_num = i // batch_size + 1
         batch = listings[i:i + batch_size]
         console.print(f"Judging batch {batch_num}/{total_batches} ({len(batch)} items)...")
         await judge_batch(batch)
+
+        # Count discarded in this batch
+        batch_discarded = sum(1 for l in batch if not l.relevant)
+        total_discarded += batch_discarded
 
         if i + batch_size < len(listings):
             await asyncio.sleep(delay_between_batches)
@@ -277,9 +291,10 @@ Listings:
             listing.relevant = True
             listing.relevance_reason = "Fallback: No relevant listings identified by the model."
 
-    console.print(f"[green]Final relevant listings:[/green] {[(listing.title, listing.relevant) for listing in listings]}")
     relevant_listings = [listing for listing in listings if listing.relevant]
-    console.print(f"\n[bold green]{len(relevant_listings)} relevant listings kept[/bold green]\n")
+    if total_discarded > 0:
+        console.print(f"[bold yellow]{total_discarded} listings discarded[/bold yellow]")
+    console.print(f"[bold green]{len(relevant_listings)} relevant listings kept[/bold green]\n")
     return relevant_listings
 
 

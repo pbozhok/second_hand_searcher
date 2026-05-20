@@ -26,6 +26,7 @@ class KeywordFilter:
         """
         keywords = user_query.lower().split()
         relevant_listings = []
+        discarded_count = 0
         
         for listing in listings:
             text = (listing.title + " " + listing.description).lower()
@@ -36,7 +37,14 @@ class KeywordFilter:
                 listing.relevant = True
                 listing.relevance_reason = f"Contains {matches}/{len(keywords)} search keywords"
                 relevant_listings.append(listing)
+            else:
+                listing.relevant = False
+                listing.relevance_reason = f"Only {matches}/{len(keywords)} keywords"
+                console.print(f"  [red]✗ {listing.title}: {listing.relevance_reason}[/red]")
+                discarded_count += 1
         
+        if discarded_count > 0:
+            console.print(f"[bold yellow]{discarded_count} listings discarded[/bold yellow]")
         console.print(f"[bold green]{len(relevant_listings)} relevant listings kept (keyword-based)[/bold green]\n")
         
         if not relevant_listings:
