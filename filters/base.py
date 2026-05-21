@@ -81,7 +81,11 @@ class BaseFilter(Module):
         
         try:
             listings = context.get_listings()
-            filtered = await self.filter(listings, context.query, context.config)
+            
+            # Use cleaned query from metadata if available, otherwise use context.query
+            query = context.get_metadata("cleaned_query", default=context.query)
+            
+            filtered = await self.filter(listings, query, context.config)
             # Clear and add filtered listings
             context.listings = filtered
             context.set_metadata(f"{self.name}_filtered", len(filtered))

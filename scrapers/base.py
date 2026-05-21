@@ -102,13 +102,27 @@ class BaseScraper(Module):
             self.initialize(context.config)
         
         try:
-            # Run the async scrape method
-            listings = await self.scrape(
-                context.query, 
-                context.config.get("max_results", config.DEFAULT_MAX_RESULTS)
-            )
-            context.add_listings(listings)
-            context.set_metadata(f"{self.name}_count", len(listings))
+            # Check if there are multiple search queries in metadata
+            search_queries = context.get_metadata("search_queries")
+            if search_queries and isinstance(search_queries, list):
+                # Use all search queries
+                all_listings = []
+                for query in search_queries:
+                    listings = await self.scrape(
+                        query,
+                        context.config.get("max_results", config.DEFAULT_MAX_RESULTS)
+                    )
+                    all_listings.extend(listings)
+                context.add_listings(all_listings)
+                context.set_metadata(f"{self.name}_count", len(all_listings))
+            else:
+                # Fallback to single query from context
+                listings = await self.scrape(
+                    context.query, 
+                    context.config.get("max_results", config.DEFAULT_MAX_RESULTS)
+                )
+                context.add_listings(listings)
+                context.set_metadata(f"{self.name}_count", len(listings))
             
         except Exception as e:
             context.add_error(

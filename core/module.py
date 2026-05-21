@@ -13,11 +13,12 @@ from typing import Dict, List, Any, Optional
 
 class ModuleType(Enum):
     """Categories of modules in the pipeline."""
+    PREPROCESSOR = "PREPROCESSOR"
     SCRAPER = "SCRAPER"
-    FILTER = "FILTER"
     PROCESSOR = "PROCESSOR"
-    RANKER = "RANKER"
+    FILTER = "FILTER"
     REVIEWER = "REVIEWER"
+    RANKER = "RANKER"
     LLM = "LLM"
 
 

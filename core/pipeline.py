@@ -48,13 +48,16 @@ class Pipeline:
     """
     Orchestrates the execution of modules in the research pipeline.
     
-    The pipeline processes a query through these stages:
+    The pipeline processes a query through these stages in order:
     1. Pre-processing (optional): Query cleaning and keyword generation
     2. Scraping: Fetch listings from multiple platforms
-    3. Processing: Price conversion, model extraction, description fetching
-    4. Filtering: Keyword or LLM-based relevance filtering
-    5. Scoring: LLM-based ranking
-    6. Review aggregation: Fetch and summarize reviews
+    3. Processing: Price conversion, deduplication
+    4. Filtering (1st pass): Keyword or LLM-based relevance filtering
+    5. Processing: Description fetching
+    6. Filtering (2nd pass): LLM-based filtering with full descriptions
+    7. Processing: Model extraction
+    8. Review aggregation: Fetch and summarize reviews
+    9. Scoring: LLM-based ranking
     
     Each stage is implemented by one or more modules.
     """
@@ -68,6 +71,7 @@ class Pipeline:
         """
         self.registry = registry or global_registry
         self._modules: Dict[ModuleType, List[Module]] = {}
+        self._preprocessor = None  # Query preprocessor (optional)
     
     def load_modules(self) -> None:
         """Load all modules from the registry."""
@@ -76,6 +80,11 @@ class Pipeline:
             modules = self.registry.get_modules(module_type)
             if modules:
                 self._modules[module_type] = modules
+        
+        # Separately get preprocessor (only one expected)
+        preprocessors = self.registry.get_modules(ModuleType.PREPROCESSOR)
+        if preprocessors:
+            self._preprocessor = preprocessors[0]
     
     async def execute(self, config: PipelineConfig) -> PipelineContext:
         """
@@ -103,28 +112,47 @@ class Pipeline:
             if not self._modules:
                 self.load_modules()
             
-            # Stage 1: Scraping
+            # Stage 0: Pre-processing (optional) - generates cleaned query and search keywords
+            if not config.skip_preprocess and self._preprocessor:
+                context = await self._execute_preprocessor(context)
+                logger.info("Pre-processing complete", extra={"query": context.query})
+            
+            # Stage 1: Scraping - fetch listings from all platforms
             context = await self._execute_stage(ModuleType.SCRAPER, context)
             logger.info("Scraping complete", extra={"listing_count": len(context.listings)})
             
-            # Stage 2: Processing (price conversion, etc.)
+            # Stage 2: Processing - price conversion and deduplication
             context = await self._execute_stage(ModuleType.PROCESSOR, context)
             logger.info("Processing complete", extra={"listing_count": len(context.listings)})
             
-            # Stage 3: Filtering
+            # Stage 3: Filtering (1st pass) - initial relevance filtering
             if not config.skip_filter:
                 context = await self._execute_stage(ModuleType.FILTER, context)
-                logger.info("Filtering complete", extra={"listing_count": len(context.listings)})
+                logger.info("Filtering pass 1 complete", extra={"listing_count": len(context.listings)})
             
-            # Stage 4: Scoring/Ranking
-            if not config.skip_score:
-                context = await self._execute_stage(ModuleType.RANKER, context)
-                logger.info("Scoring complete", extra={"listing_count": len(context.listings)})
+            # Stage 4: Processing - fetch descriptions for relevant items
+            # Run only description fetcher, not all processors
+            context = await self._execute_description_fetchers(context)
+            logger.info("Description fetching complete", extra={"listing_count": len(context.listings)})
             
-            # Stage 5: Review aggregation
+            # Stage 5: Filtering (2nd pass) - filtering with full descriptions
+            if not config.skip_filter:
+                context = await self._execute_stage(ModuleType.FILTER, context)
+                logger.info("Filtering pass 2 complete", extra={"listing_count": len(context.listings)})
+            
+            # Stage 6: Processing - extract product models
+            context = await self._execute_model_extractors(context)
+            logger.info("Model extraction complete", extra={"listing_count": len(context.listings)})
+            
+            # Stage 7: Review aggregation - fetch and summarize reviews
             if not config.skip_reviews:
                 context = await self._execute_stage(ModuleType.REVIEWER, context)
                 logger.info("Review aggregation complete", extra={"listing_count": len(context.listings)})
+            
+            # Stage 8: Scoring/Ranking - score and rank listings
+            if not config.skip_score:
+                context = await self._execute_stage(ModuleType.RANKER, context)
+                logger.info("Scoring complete", extra={"listing_count": len(context.listings)})
             
             logger.info("Pipeline completed successfully", 
                        extra={"listing_count": len(context.listings), "error_count": len(context.errors)})
@@ -137,6 +165,89 @@ class Pipeline:
                 message=str(e)
             )
         
+        return context
+    
+    async def _execute_preprocessor(self, context: PipelineContext) -> PipelineContext:
+        """
+        Execute the query preprocessor to clean and expand the query.
+        
+        Args:
+            context: The pipeline context
+            
+        Returns:
+            Modified context with preprocessed query and search queries
+        """
+        if not self._preprocessor:
+            return context
+        
+        try:
+            # Initialize if needed
+            if not hasattr(self._preprocessor, '_initialized') or not self._preprocessor._initialized:
+                self._preprocessor.initialize(context.config)
+            
+            # Execute the preprocessor module
+            context = await self._preprocessor.execute(context)
+            
+        except Exception as e:
+            context.add_error(
+                module_name="preprocessor",
+                error_type="PREPROCESSOR_ERROR",
+                message=str(e),
+                context={"query": context.query}
+            )
+        
+        return context
+    
+    async def _execute_description_fetchers(self, context: PipelineContext) -> PipelineContext:
+        """
+        Execute only the description fetcher processors.
+        
+        Args:
+            context: The pipeline context
+            
+        Returns:
+            Modified context
+        """
+        modules = self._modules.get(ModuleType.PROCESSOR, [])
+        for module in modules:
+            if module.name == "description-fetcher":
+                try:
+                    if not hasattr(module, '_initialized') or not module._initialized:
+                        module.initialize(context.config)
+                    context = await module.execute(context)
+                except Exception as e:
+                    logger.error("Description fetcher failed", extra={"error": str(e)})
+                    context.add_error(
+                        module_name=module.name,
+                        error_type="PROCESSOR_ERROR",
+                        message=str(e)
+                    )
+        return context
+    
+    async def _execute_model_extractors(self, context: PipelineContext) -> PipelineContext:
+        """
+        Execute only the model extractor processors.
+        
+        Args:
+            context: The pipeline context
+            
+        Returns:
+            Modified context
+        """
+        modules = self._modules.get(ModuleType.PROCESSOR, [])
+        for module in modules:
+            if module.name == "model-extractor":
+                try:
+                    if not hasattr(module, '_initialized') or not module._initialized:
+                        module.initialize(context.config)
+                    context = await module.execute(context)
+                except Exception as e:
+                    logger.error("Model extractor failed", extra={"error": str(e)})
+                    context.add_error(
+                        module_name=module.name,
+                        error_type="PROCESSOR_ERROR",
+                        message=str(e)
+                    )
         return context
     
     async def _execute_stage(self, module_type: ModuleType, context: PipelineContext) -> PipelineContext:

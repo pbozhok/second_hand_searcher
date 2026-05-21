@@ -41,6 +41,11 @@ from utils import extract_json, parse_price, normalize_model_name
 from llm import get_client
 from scrapers import DBAScraper, VintedScraper, TraderaScraper
 from processors.query_preprocessor import QueryPreprocessor, preprocess_query
+# Import all module directories to trigger registration
+import processors
+import filters
+import reviewers
+import rankers
 from core.logging import get_logger
 from core.pipeline import Pipeline, PipelineConfig
 from core.registry import registry

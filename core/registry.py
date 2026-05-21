@@ -28,12 +28,13 @@ class ModuleRegistry:
         self._modules: Dict[str, Module] = {}
         self._modules_by_type: Dict[ModuleType, List[Module]] = {}
         self._discovery_paths: Dict[ModuleType, str] = {
+            ModuleType.PREPROCESSOR: "",  # Preprocessors are registered manually
             ModuleType.SCRAPER: "scrapers",
-            ModuleType.FILTER: "filters",
             ModuleType.PROCESSOR: "processors",
+            ModuleType.FILTER: "filters",
             ModuleType.REVIEWER: "reviewers",
+            ModuleType.RANKER: "rankers",
             ModuleType.LLM: "llm",
-            ModuleType.RANKER: "",  # Ranker is a single module for now
         }
         # Initialize modules_by_type with empty lists for all types
         for t in ModuleType:
