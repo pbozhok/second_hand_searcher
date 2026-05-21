@@ -100,6 +100,15 @@ class QueryPreprocessorModule(Module):
             # Build search queries: cleaned query + generated keywords
             search_queries = [cleaned_query] + keywords
             
+            # Deduplicate while preserving order
+            seen = set()
+            unique_queries = []
+            for q in search_queries:
+                if q not in seen:
+                    seen.add(q)
+                    unique_queries.append(q)
+            search_queries = unique_queries
+            
             # Store in metadata
             context.set_metadata("cleaned_query", cleaned_query)
             context.set_metadata("search_queries", search_queries)

@@ -61,3 +61,32 @@ DEFAULT_MAX_RESULTS = 40  # Default max results per scraper
 
 MAX_REVIEW_RESULTS = 3
 REVIEW_DELAY = 4.0  # seconds between model searches
+
+
+# ── Web Interface Configuration ─────────────────────────────────────────────
+
+class WebConfig:
+    """Configuration for the web interface."""
+    
+    # Server settings
+    HOST = os.getenv("WEB_HOST", "0.0.0.0")
+    PORT = int(os.getenv("WEB_PORT", "8000"))
+    DEBUG = os.getenv("WEB_DEBUG", "false").lower() == "true"
+    
+    # CORS settings (for development, allow all)
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+    
+    # Static files and templates
+    STATIC_DIR = "web/frontend/static"
+    TEMPLATES_DIR = "web/frontend/templates"
+    
+    # API settings
+    API_PREFIX = "/api/v1"
+    MAX_CONCURRENT_SEARCHES = 10
+    
+    # Timeouts
+    SEARCH_TIMEOUT_SECONDS = 30
+
+
+# Web configuration instance
+web_config = WebConfig()

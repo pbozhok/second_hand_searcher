@@ -146,6 +146,66 @@ class TraderaScraper(BaseScraper):
                 if description:
                     description = description[:300]
                 
+                # Extract images from __NEXT_DATA__
+                images = []
+                
+                # Try new format: imageUrlTemplate (current Tradera structure)
+                image_template = item.get("imageUrlTemplate")
+                if image_template:
+                    # imageUrlTemplate might be a string or a dict
+                    if isinstance(image_template, str):
+                        # Try to construct URL from template
+                        # Tradera templates use various placeholders: {format}, {0}, etc.
+                        # Common patterns:
+                        # - "https://img.tradera.net/{format}/000/no_image" (no-image placeholder)
+                        # - "//images.tradera.com/{0}/..." (with index placeholder)
+                        base_url = image_template
+                        
+                        # Replace common placeholders
+                        for placeholder in ["{format}", "{0}", "{index}", "{size}"]:
+                            if placeholder in base_url:
+                                # Use a reasonable default for the placeholder
+                                if placeholder == "{format}":
+                                    base_url = base_url.replace(placeholder, "medium")
+                                else:
+                                    base_url = base_url.replace(placeholder, "0")
+                        
+                        # Ensure URL has protocol
+                        if base_url.startswith("//"):
+                            base_url = f"https:{base_url}"
+                        elif base_url.startswith("/"):
+                            base_url = f"https://www.tradera.com{base_url}"
+                        
+                        if base_url:
+                            images.append(base_url)
+                    elif isinstance(image_template, dict):
+                        url = image_template.get("url", "") or image_template.get("href", "")
+                        if url:
+                            if url.startswith("//"):
+                                url = f"https:{url}"
+                            elif url.startswith("/"):
+                                url = f"https://www.tradera.com{url}"
+                            images.append(url)
+                
+                # Try old format: photos array (legacy)
+                if not images:
+                    photos = item.get("photos") or []
+                    if photos:
+                        for photo in photos:
+                            if isinstance(photo, dict):
+                                url = photo.get("url", "") or photo.get("imageUrl", "")
+                                if url:
+                                    if url.startswith("//"):
+                                        url = f"https:{url}"
+                                    elif url.startswith("/"):
+                                        url = f"https://www.tradera.com{url}"
+                                    images.append(url)
+                            elif isinstance(photo, str):
+                                images.append(photo)
+                
+                if images:
+                    images = list(dict.fromkeys(images))[:3]
+                
                 listings.append(Listing(
                     title=title,
                     price=price,
@@ -154,6 +214,7 @@ class TraderaScraper(BaseScraper):
                     description=description,
                     platform=self.platform,
                     date_posted=date_posted,
+                    images=images,
                 ))
                 
         except Exception as e:
@@ -256,6 +317,19 @@ class TraderaScraper(BaseScraper):
                 time_el = card.find("time")
                 if time_el:
                     date_posted = time_el.get("datetime", time_el.get_text(strip=True))
+            
+            # Extract images
+            images = []
+            for img_el in card.find_all('img', src=True):
+                src = img_el.get('src', '').strip()
+                if src and not src.startswith('data:'):
+                    if src.startswith('//'):
+                        src = f"https:{src}"
+                    elif src.startswith('/'):
+                        src = f"https://www.tradera.com{src}"
+                    images.append(src)
+            if images:
+                images = list(dict.fromkeys(images))[:3]
 
             listings.append(Listing(
                 title=title,
@@ -265,6 +339,7 @@ class TraderaScraper(BaseScraper):
                 description=description,
                 platform=self.platform,
                 date_posted=date_posted,
+                images=images,
             ))
         
         return listings

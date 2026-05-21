@@ -1,11 +1,16 @@
 # Environment variables
-.env
-.env.local
-.env.*.local
+.env*
+!.env.example
+!.env.template
 
 # Agent files
 agents/
 .vibe/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Python
 __pycache__/
@@ -15,6 +20,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -38,10 +44,19 @@ wheels/
 *.swp
 *.swo
 
-# OS
+# Web/Frontend
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Universal
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
+*.tmp
+*.swp
+Thumbs.db

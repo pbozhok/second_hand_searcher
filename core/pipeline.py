@@ -21,7 +21,7 @@ class PipelineConfig:
     """Configuration for the pipeline execution."""
     query: str
     max_results: int = 20
-    max_keywords: int = 8
+    max_keywords: int = 3
     target_currency: str = "EUR"
     llm_backend: str = "gemini"
     skip_preprocess: bool = False
