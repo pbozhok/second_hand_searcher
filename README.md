@@ -98,12 +98,92 @@ python second_hand_research.py "Dyson V15" --llm mistral --currency DKK --debug
 python second_hand_research.py "Samsung Galaxy S23" --currency SEK
 ```
 
+---
+
+## Web Interface
+
+The project now includes a modern web interface that provides the same search functionality through a browser.
+
+### Quick Start
+
+```bash
+# Install web dependencies
+pip install fastapi uvicorn
+
+# Start the web server
+uvicorn web.backend.main:app --reload --port 8000
+
+# Open your browser to: http://localhost:8000
+```
+
+### Features
+
+- **Search Bar**: Enter any query to search across DBA, Vinted, and Tradera
+- **Dynamic Results**: View results as interactive cards with images, prices, and details
+- **Toggle Options**: Enable/disable filtering, reviews, and scoring
+- **Sort Results**: Sort by score, price (ascending/descending), or date
+- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Card Hover**: Hover over cards to see review summaries
+- **Click to Open**: Click any card to open the original listing
+
+### Configuration
+
+Create a `.env.web` file for web-specific settings:
+
+```bash
+# Server settings
+WEB_HOST=0.0.0.0
+WEB_PORT=8000
+WEB_DEBUG=true
+
+# API keys (shared with CLI)
+MISTRAL_API_KEY=your_mistral_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+Or pass environment variables directly:
+
+```bash
+MISTRAL_API_KEY=your_key uvicorn web.backend.main:app --port 8000
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Main web interface |
+| `/api/v1/search` | GET | Search for items |
+| `/api/v1/search/quick` | GET | Quick search with defaults |
+| `/api/docs` | GET | Interactive API documentation (Swagger) |
+| `/api/redoc` | GET | Alternative API documentation |
+| `/health` | GET | Health check endpoint |
+
+**Search Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | string | - | Search query (required) |
+| `max_results` | integer | 40 | Maximum results (1-100) |
+| `currency` | string | EUR | Target currency (EUR, DKK, SEK) |
+| `use_filter` | boolean | true | Enable LLM filtering |
+| `use_reviews` | boolean | true | Enable review extraction |
+| `use_scoring` | boolean | true | Enable LLM scoring |
+| `sort_by` | string | score | Sort by: score, price_asc, price_desc, date |
+
+**Example API Request**:
+
+```bash
+curl "http://localhost:8000/api/v1/search?query=leather+jacket&max_results=20&sort_by=price_asc"
+```
+
+---
+
 ## Project Structure
 
 ```
 second_hand_searcher/
 ├── second_hand_research.py    # Main entry point (legacy + new pipeline)
-├── config.py                  # Configuration and constants
+├── config.py                  # Configuration and constants (includes WebConfig)
 ├── models.py                  # Data models (Listing, etc.)
 ├── output.py                  # Result formatting and display
 ├── ranker.py                  # LLM-based ranking logic
@@ -116,6 +196,32 @@ second_hand_searcher/
 │   ├── injection.py           # Dependency injection container
 │   ├── logging.py             # Structured JSON logging
 │   └── pipeline.py            # Modular pipeline orchestrator
+├── web/                      # Web interface (NEW)
+│   ├── __init__.py            # Web package
+│   ├── backend/
+│   │   ├── __init__.py        # Backend package
+│   │   ├── main.py            # FastAPI application entry point
+│   │   ├── api/
+│   │   │   ├── __init__.py    # API package
+│   │   │   └── search.py       # Search endpoints
+│   │   ├── models/
+│   │   │   ├── __init__.py    # Models package
+│   │   │   └── schemas.py     # Pydantic models (SearchRequest, ItemResponse, etc.)
+│   │   ├── shared/
+│   │   │   ├── __init__.py    # Shared utilities package
+│   │   │   └── adapters.py    # Core ↔ API adapters
+│   │   └── tests/
+│   │       └── __init__.py    # Test package
+│   └── frontend/
+│       ├── static/
+│       │   ├── css/
+│       │   │   └── styles.css  # All frontend styles
+│       │   ├── js/
+│       │   │   └── app.js      # Frontend JavaScript
+│       │   └── images/
+│       │       └── placeholder.png
+│       └── templates/
+│           └── index.html     # Main HTML template
 ├── scrapers/                  # Platform scrapers
 │   ├── __init__.py            # Scraper exports + auto-registration
 │   ├── base.py                # BaseScraper (extends Module)
@@ -152,6 +258,11 @@ second_hand_searcher/
     ├── test_llm.py             # LLM contract tests
     ├── test_llm_config.py      # LLM config tests
     ├── test_pipeline.py        # Pipeline tests
+    └── frontend/               # Frontend tests (Playwright)
+        ├── __init__.py        # Frontend test package
+        ├── test_search.py     # Search flow tests
+        ├── test_cards.py      # Card display tests
+        └── test_responsive.py  # Responsive design tests
     ├── test_registry.py         # Registry tests
     └── integration/            # Integration tests
 ```

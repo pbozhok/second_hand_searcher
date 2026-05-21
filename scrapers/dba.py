@@ -220,6 +220,28 @@ class DBAScraper(BaseScraper):
                             if time_el:
                                 date_posted = time_el.get("datetime", time_el.get_text(strip=True))
 
+                    # Extract images
+                    images = []
+                    # Look for img tags in card and parent
+                    for img_el in card.find_all('img', src=True):
+                        src = img_el.get('src', '').strip()
+                        if src and not src.startswith('data:'):
+                            # Make absolute URL if relative
+                            if src.startswith('/'):
+                                src = f"https://www.dba.dk{src}"
+                            images.append(src)
+                    # If no images found in card, try parent
+                    if not images and card.parent:
+                        for img_el in card.parent.find_all('img', src=True):
+                            src = img_el.get('src', '').strip()
+                            if src and not src.startswith('data:'):
+                                if src.startswith('/'):
+                                    src = f"https://www.dba.dk{src}"
+                                images.append(src)
+                    # Deduplicate and limit to first 3
+                    if images:
+                        images = list(dict.fromkeys(images))[:3]
+
                     listings.append(Listing(
                         title=title,
                         price=price,
@@ -228,6 +250,7 @@ class DBAScraper(BaseScraper):
                         description=description,
                         platform=self.platform,
                         date_posted=date_posted,
+                        images=images,
                     ))
 
             except Exception as e:

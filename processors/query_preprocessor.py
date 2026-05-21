@@ -289,7 +289,7 @@ Now generate keywords for the user query:"""
     async def generate_search_queries(
         self, 
         query: str, 
-        max_keywords: int = 10,
+        max_keywords: int = 3,
         use_original: bool = True
     ) -> list[str]:
         """
@@ -326,7 +326,7 @@ Now generate keywords for the user query:"""
 async def preprocess_query(
     query: str,
     llm_backend: str = "gemini",
-    max_keywords: int = 10,
+    max_keywords: int = 3,
     use_original: bool = True,
     debug: bool = False
 ) -> tuple[str, list[str]]:

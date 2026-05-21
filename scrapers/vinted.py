@@ -76,9 +76,43 @@ class VintedScraper(BaseScraper):
                     url         = item.url or ""
                     description = item.description or ""
                     
+                    # Extract images
+                    images = []
+                    
+                    # Try from photo attribute (single main photo dict)
+                    if hasattr(item, 'photo') and item.photo:
+                        photo = item.photo
+                        if isinstance(photo, dict):
+                            photo_url = photo.get('url', '')
+                            if photo_url:
+                                images.append(photo_url)
+                        elif isinstance(photo, str):
+                            images.append(photo)
+                    
+                    # Try from photos attribute (list of VintedImage objects)
+                    if hasattr(item, 'photos') and item.photos:
+                        for photo in item.photos:
+                            if hasattr(photo, 'url') and photo.url:
+                                images.append(photo.url)
+                            elif isinstance(photo, dict) and 'url' in photo:
+                                images.append(photo['url'])
+                    
+                    # Try from json_data photos
+                    json_data = getattr(item, 'json_data', {})
+                    if json_data and 'photos' in json_data:
+                        for photo in json_data['photos']:
+                            if isinstance(photo, dict):
+                                if 'url' in photo:
+                                    images.append(photo['url'])
+                                elif 'full_size_url' in photo:
+                                    images.append(photo['full_size_url'])
+                    
+                    # Deduplicate and limit
+                    if images:
+                        images = list(dict.fromkeys(images))[:3]
+                    
                     # Try to extract date from json_data
                     date_posted = ""
-                    json_data = getattr(item, 'json_data', {})
                     if json_data:
                         # Check for timestamp in photos[0]['high_resolution']['timestamp']
                         if 'photos' in json_data and json_data['photos']:
@@ -100,6 +134,7 @@ class VintedScraper(BaseScraper):
                         description=description,
                         platform=self.platform,
                         date_posted=date_posted,
+                        images=images,
                     ))
                 except AttributeError as e:
                     self.log_debug(f"[yellow]Vinted item parse error (skipping): {e}[/yellow]")
