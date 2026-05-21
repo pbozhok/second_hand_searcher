@@ -123,8 +123,9 @@ class Pipeline:
             context = await self._execute_stage(ModuleType.SCRAPER, context)
             logger.info("Scraping complete", extra={"listing_count": len(context.listings)})
             
-            # Stage 2: Processing - price conversion and deduplication
-            context = await self._execute_stage(ModuleType.PROCESSOR, context)
+            # Stage 2: Processing - price conversion and deduplication only
+            context = await self._execute_price_converters(context)
+            context = await self._execute_deduplicators(context)
             logger.info("Processing complete", extra={"listing_count": len(context.listings)})
             
             # Stage 3: Filtering (1st pass) - initial relevance filtering
@@ -245,6 +246,58 @@ class Pipeline:
                     context = await module.execute(context)
                 except Exception as e:
                     logger.error("Model extractor failed", extra={"error": str(e)})
+                    context.add_error(
+                        module_name=module.name,
+                        error_type="PROCESSOR_ERROR",
+                        message=str(e)
+                    )
+        return context
+    
+    async def _execute_price_converters(self, context: PipelineContext) -> PipelineContext:
+        """
+        Execute only the price converter processors.
+        
+        Args:
+            context: The pipeline context
+            
+        Returns:
+            Modified context
+        """
+        modules = self._modules.get(ModuleType.PROCESSOR, [])
+        for module in modules:
+            if module.name == "price-converter":
+                try:
+                    if not hasattr(module, '_initialized') or not module._initialized:
+                        module.initialize(context.config)
+                    context = await module.execute(context)
+                except Exception as e:
+                    logger.error("Price converter failed", extra={"error": str(e)})
+                    context.add_error(
+                        module_name=module.name,
+                        error_type="PROCESSOR_ERROR",
+                        message=str(e)
+                    )
+        return context
+    
+    async def _execute_deduplicators(self, context: PipelineContext) -> PipelineContext:
+        """
+        Execute only the deduplicator processors.
+        
+        Args:
+            context: The pipeline context
+            
+        Returns:
+            Modified context
+        """
+        modules = self._modules.get(ModuleType.PROCESSOR, [])
+        for module in modules:
+            if module.name == "deduplicator":
+                try:
+                    if not hasattr(module, '_initialized') or not module._initialized:
+                        module.initialize(context.config)
+                    context = await module.execute(context)
+                except Exception as e:
+                    logger.error("Deduplicator failed", extra={"error": str(e)})
                     context.add_error(
                         module_name=module.name,
                         error_type="PROCESSOR_ERROR",
