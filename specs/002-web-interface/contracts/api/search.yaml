@@ -1,0 +1,328 @@
+openapi: 3.0.3
+info:
+  title: Search API
+  description: API for second-hand search web interface
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Development server
+  - url: https://api.secondhand-search.example.com/v1
+    description: Production server
+
+paths:
+  /search:
+    get:
+      tags:
+        - Search
+      summary: Search for second-hand items
+      description: Execute a search query and return matching items
+      operationId: searchItems
+      parameters:
+        - name: query
+          in: query
+          description: Search query string
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 500
+        - name: max_results
+          in: query
+          description: Maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 40
+        - name: currency
+          in: query
+          description: Target currency for price conversion
+          required: false
+          schema:
+            type: string
+            enum: [EUR, DKK, SEK]
+            default: EUR
+        - name: use_filter
+          in: query
+          description: Enable LLM-based filtering
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: use_reviews
+          in: query
+          description: Enable review extraction
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: use_scoring
+          in: query
+          description: Enable LLM-based scoring
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: sort_by
+          in: query
+          description: Sort results by
+          required: false
+          schema:
+            type: string
+            enum: [score, price_asc, price_desc, date]
+            default: score
+      responses:
+        '200':
+          description: Successful search
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Search timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /search/quick:
+    get:
+      tags:
+        - Search
+      summary: Quick search with defaults
+      description: Quick search using all default options
+      operationId: quickSearch
+      parameters:
+        - name: query
+          in: query
+          description: Search query string
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 500
+      responses:
+        '200':
+          description: Successful search
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    SearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Search query string
+        max_results:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 40
+          description: Maximum number of results to return
+        currency:
+          type: string
+          enum: [EUR, DKK, SEK]
+          default: EUR
+          description: Target currency for price conversion
+        use_filter:
+          type: boolean
+          default: true
+          description: Enable LLM-based filtering
+        use_reviews:
+          type: boolean
+          default: true
+          description: Enable review extraction
+        use_scoring:
+          type: boolean
+          default: true
+          description: Enable LLM-based scoring
+        sort_by:
+          type: string
+          enum: [score, price_asc, price_desc, date]
+          default: score
+          description: Sort results by
+      required:
+        - query
+
+    ItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique item identifier
+        title:
+          type: string
+          description: Item title
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Item price
+        currency:
+          type: string
+          description: Currency code
+          enum: [EUR, DKK, SEK]
+        posted_date:
+          type: string
+          format: date
+          description: Date posted (YYYY-MM-DD)
+        original_url:
+          type: string
+          format: uri
+          description: URL to original advertisement
+        image_url:
+          type: string
+          format: uri
+          description: URL to item image
+        platform:
+          type: string
+          description: Source platform
+          enum: [DBA, Vinted, Tradera]
+        score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Relevance score
+        description:
+          type: string
+          maxLength: 500
+          description: Item description
+        location:
+          type: string
+          description: Item location
+      required:
+        - id
+        - title
+        - original_url
+        - platform
+
+    ReviewResponse:
+      type: object
+      properties:
+        item_id:
+          type: string
+          description: Reference to item
+        average_rating:
+          type: number
+          format: float
+          minimum: 1.0
+          maximum: 5.0
+          description: Average rating
+        review_count:
+          type: integer
+          minimum: 0
+          description: Number of reviews
+        summary:
+          type: string
+          maxLength: 1000
+          description: Summarized review text
+        sentiment:
+          type: string
+          description: Overall sentiment
+          enum: [positive, neutral, negative]
+        source:
+          type: string
+          description: Review source
+
+    ToggleStates:
+      type: object
+      properties:
+        filtering:
+          type: boolean
+          default: true
+          description: Filtering enabled
+        reviewing:
+          type: boolean
+          default: true
+          description: Reviewing enabled
+        scoring:
+          type: boolean
+          default: true
+          description: Scoring enabled
+
+    SearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Original search query
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemResponse'
+          description: List of matching items
+        reviews:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ReviewResponse'
+          description: Reviews keyed by item_id
+        total_results:
+          type: integer
+          description: Total number of results
+        sort_by:
+          type: string
+          description: Current sort order
+          enum: [score, price_asc, price_desc, date]
+        toggles:
+          $ref: '#/components/schemas/ToggleStates'
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+      required:
+        - query
+        - results
+        - total_results
+        - sort_by
+        - toggles
+        - timestamp
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error type
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details
+      required:
+        - error
+        - message
