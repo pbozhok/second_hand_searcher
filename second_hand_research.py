@@ -1018,6 +1018,7 @@ if __name__ == "__main__":
         pipeline_config = PipelineConfig(
             query=query,
             max_results=config.DEFAULT_MAX_RESULTS,
+            max_keywords=args.max_keywords,
             target_currency=args.currency,
             llm_backend=args.llm,
             skip_preprocess=args.no_preprocess,

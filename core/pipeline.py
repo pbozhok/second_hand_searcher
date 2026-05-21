@@ -21,6 +21,7 @@ class PipelineConfig:
     """Configuration for the pipeline execution."""
     query: str
     max_results: int = 20
+    max_keywords: int = 8
     target_currency: str = "EUR"
     llm_backend: str = "gemini"
     skip_preprocess: bool = False
@@ -34,6 +35,7 @@ class PipelineConfig:
         return {
             "query": self.query,
             "max_results": self.max_results,
+            "max_keywords": self.max_keywords,
             "target_currency": self.target_currency,
             "llm_backend": self.llm_backend,
             "skip_preprocess": self.skip_preprocess,
