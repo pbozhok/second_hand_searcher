@@ -107,7 +107,7 @@ class Pipeline:
             metadata={"pipeline_start": "start"}
         )
         
-        logger.info("Pipeline started", extra={"query": config.query, "config": config.to_dict()})
+        logger.info("Pipeline started", extra={"query": config.query})
         
         try:
             # Load modules if not already loaded
@@ -117,7 +117,7 @@ class Pipeline:
             # Stage 0: Pre-processing (optional) - generates cleaned query and search keywords
             if not config.skip_preprocess and self._preprocessor:
                 context = await self._execute_preprocessor(context)
-                logger.info("Pre-processing complete", extra={"query": context.query})
+                logger.info("Query pre-processed", extra={"original_query": context.get_metadata("original_query"), "cleaned_query": context.query})
             
             # Stage 1: Scraping - fetch listings from all platforms
             context = await self._execute_stage(ModuleType.SCRAPER, context)
@@ -126,42 +126,46 @@ class Pipeline:
             # Stage 2: Processing - price conversion and deduplication only
             context = await self._execute_price_converters(context)
             context = await self._execute_deduplicators(context)
-            logger.info("Processing complete", extra={"listing_count": len(context.listings)})
+            logger.info("Prices converted and duplicates removed", extra={"listing_count": len(context.listings)})
             
             # Stage 3: Filtering (1st pass) - initial relevance filtering
             # When skip_filter=True, use keyword filter; otherwise use LLM filter
             context = await self._execute_filter_pass(context, use_llm=not config.skip_filter, pass_num=1)
-            logger.info("Filtering pass 1 complete", extra={"listing_count": len(context.listings)})
+            logger.info("First filtering pass complete", extra={"listing_count": len(context.listings)})
             
             # Stage 4: Processing - fetch descriptions for relevant items
             # Run only description fetcher, not all processors
             context = await self._execute_description_fetchers(context)
-            logger.info("Description fetching complete", extra={"listing_count": len(context.listings)})
+            logger.info("Descriptions fetched", extra={"listing_count": len(context.listings)})
             
             # Stage 5: Filtering (2nd pass) - filtering with full descriptions
             # Use the same filter type as pass 1
             context = await self._execute_filter_pass(context, use_llm=not config.skip_filter, pass_num=2)
-            logger.info("Filtering pass 2 complete", extra={"listing_count": len(context.listings)})
+            logger.info("Second filtering pass complete", extra={"listing_count": len(context.listings)})
             
             # Stage 6: Processing - extract product models
             context = await self._execute_model_extractors(context)
-            logger.info("Model extraction complete", extra={"listing_count": len(context.listings)})
+            logger.info("Product models extracted", extra={"listing_count": len(context.listings)})
             
             # Stage 7: Review aggregation - fetch and summarize reviews
             if not config.skip_reviews:
                 context = await self._execute_stage(ModuleType.REVIEWER, context)
-                logger.info("Review aggregation complete", extra={"listing_count": len(context.listings)})
+                logger.info("Reviews aggregated", extra={"listing_count": len(context.listings)})
+            else:
+                logger.info("Reviews skipped (--no-reviews flag)")
             
             # Stage 8: Scoring/Ranking - score and rank listings
             if not config.skip_score:
                 context = await self._execute_stage(ModuleType.RANKER, context)
-                logger.info("Scoring complete", extra={"listing_count": len(context.listings)})
+                logger.info("Listings scored and ranked", extra={"listing_count": len(context.listings)})
+            else:
+                logger.info("Scoring skipped (--no-score flag)")
             
-            logger.info("Pipeline completed successfully", 
-                       extra={"listing_count": len(context.listings), "error_count": len(context.errors)})
+            logger.info("Pipeline completed", 
+                       extra={"final_listing_count": len(context.listings), "error_count": len(context.errors)})
             
         except Exception as e:
-            logger.error("Pipeline failed", extra={"error": str(e)})
+            logger.error("Pipeline failed", extra={"error": str(e), "error_type": type(e).__name__})
             context.add_error(
                 module_name="pipeline",
                 error_type="PIPELINE_ERROR",
@@ -319,6 +323,7 @@ class Pipeline:
         """
         modules = self._modules.get(ModuleType.FILTER, [])
         filter_module = None
+        filter_type = "LLM" if use_llm else "keyword"
         
         # Select the appropriate filter
         if use_llm:
@@ -337,9 +342,9 @@ class Pipeline:
                 if not hasattr(filter_module, '_initialized') or not filter_module._initialized:
                     filter_module.initialize(context.config)
                 context = await filter_module.execute(context)
-                logger.debug("Filter pass {} completed", extra={"pass_num": pass_num, "filter": filter_module.name})
+                logger.info("Filter pass {} completed", extra={"pass_num": pass_num, "filter_type": filter_type})
             except Exception as e:
-                logger.error("Filter pass {} failed", extra={"pass_num": pass_num, "filter": filter_module.name, "error": str(e)})
+                logger.error("Filter pass {} failed", extra={"pass_num": pass_num, "filter_type": filter_type, "error": str(e)})
                 context.add_error(
                     module_name=filter_module.name,
                     error_type="FILTER_ERROR",

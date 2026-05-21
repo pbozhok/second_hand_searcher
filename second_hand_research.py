@@ -54,11 +54,9 @@ from core.injection import register_llm_providers
 # Register LLM providers with DI container (must be done after all imports to avoid circular imports)
 register_llm_providers()
 
-logger = get_logger(__name__, module_name="second_hand_research")
-
 # Add argument parsing for debug flag
 parser = argparse.ArgumentParser(description="Second-hand product research agent")
-parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+parser.add_argument("--debug", action="store_true", help="Enable debug logging (JSON format)")
 parser.add_argument("--no-reviews", action="store_true", help="Skip review extraction and summarization")
 parser.add_argument("--no-filter", action="store_true", help="Skip LLM-based filtering (use simple keyword matching instead)")
 parser.add_argument("--no-score", action="store_true", help="Skip LLM-based scoring (sort by price instead)")
@@ -69,6 +67,9 @@ parser.add_argument("--max-keywords", type=int, default=8, help="Maximum number 
 parser.add_argument("--new-pipeline", action="store_true", help="Use new modular pipeline (experimental)")
 parser.add_argument("query", type=str, help="The search query for second-hand listings")
 args = parser.parse_args()
+
+# Create logger with human-readable formatting (default)
+logger = get_logger(__name__, module_name="second_hand_research")
 
 # Initialize LLM client (will check availability)
 try:
