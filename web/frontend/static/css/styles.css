@@ -64,12 +64,25 @@ body {
     transform: translateX(-50%);
     width: 90%;
     max-width: 1200px;
+    z-index: 100;
+    background: var(--card-background);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 1rem;
 }
 
 .search-container.active .search-box {
-    padding: 0.5rem;
+    padding: 0;
     background: transparent;
     box-shadow: none;
+}
+
+.search-container.active .toggle-controls {
+    margin-bottom: 1rem;
+}
+
+.search-container.active .sort-controls {
+    margin-bottom: 1rem;
 }
 
 .search-container.active h1 {
@@ -305,7 +318,6 @@ body {
    ============================================ */
 
 .results-container {
-    margin-top: 80px;
     padding: 1rem;
     max-width: 1400px;
     margin-left: auto;

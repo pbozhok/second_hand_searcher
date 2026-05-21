@@ -461,6 +461,7 @@ function submitSearch() {
     // Move search bar to top
     if (elements.searchContainer) {
         elements.searchContainer.classList.add('active');
+        document.documentElement.style.paddingTop = '220px';
     }
     
     // Show loading
