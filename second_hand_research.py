@@ -41,6 +41,15 @@ from utils import extract_json, parse_price, normalize_model_name
 from llm import get_client
 from scrapers import DBAScraper, VintedScraper, TraderaScraper
 from processors.query_preprocessor import QueryPreprocessor, preprocess_query
+from core.logging import get_logger
+from core.pipeline import Pipeline, PipelineConfig
+from core.registry import registry
+from core.injection import register_llm_providers
+
+# Register LLM providers with DI container (must be done after all imports to avoid circular imports)
+register_llm_providers()
+
+logger = get_logger(__name__, module_name="second_hand_research")
 
 # Add argument parsing for debug flag
 parser = argparse.ArgumentParser(description="Second-hand product research agent")
@@ -52,6 +61,7 @@ parser.add_argument("--llm", type=str, default="gemini", choices=["gemini", "mis
 parser.add_argument("--currency", type=str, default="EUR", choices=["EUR", "DKK", "SEK"], help="Target currency (default: EUR)")
 parser.add_argument("--no-preprocess", action="store_true", help="Skip query pre-processing (use query as-is for scraping)")
 parser.add_argument("--max-keywords", type=int, default=8, help="Maximum number of generated search keywords (default: 8)")
+parser.add_argument("--new-pipeline", action="store_true", help="Use new modular pipeline (experimental)")
 parser.add_argument("query", type=str, help="The search query for second-hand listings")
 args = parser.parse_args()
 
@@ -994,4 +1004,31 @@ if __name__ == "__main__":
 
     query = args.query
     skip_reviews = args.no_reviews
-    asyncio.run(research(query, skip_reviews=skip_reviews))
+    
+    # Use new modular pipeline if requested
+    if args.new_pipeline:
+        logger.info("Using new modular pipeline")
+        
+        # Create pipeline config
+        pipeline_config = PipelineConfig(
+            query=query,
+            max_results=config.DEFAULT_MAX_RESULTS,
+            target_currency=args.currency,
+            llm_backend=args.llm,
+            skip_preprocess=args.no_preprocess,
+            skip_filter=args.no_filter,
+            skip_score=args.no_score,
+            skip_reviews=skip_reviews,
+            debug=args.debug,
+        )
+        
+        # Create and run pipeline
+        pipeline = Pipeline()
+        context = asyncio.run(pipeline.execute(pipeline_config))
+        
+        # Display results from context
+        from output import display_results_from_context
+        display_results_from_context(context, query, skip_reviews=skip_reviews)
+    else:
+        # Use legacy pipeline
+        asyncio.run(research(query, skip_reviews=skip_reviews))
