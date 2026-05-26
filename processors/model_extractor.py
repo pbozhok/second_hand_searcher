@@ -74,7 +74,49 @@ class ModelExtractor(BaseProcessor):
             True if valid
         """
         return self._initialized and self._llm_client is not None
-    
+
+    async def _process_batch(self, batch: List[Any]) -> None:
+        """
+        Process a single batch of listings.
+        
+        Args:
+            batch: List of listings in this batch
+        """
+        items_json = json.dumps(
+            [{"id": j, "title": listing.title, "description": getattr(listing, 'description', '')[:200]} 
+             for j, listing in enumerate(batch)],
+            ensure_ascii=False,
+        )
+
+        prompt = f"""From each listing below, extract the most specific product model name
+suitable for a Google search to find professional reviews.
+Use both the title and description to identify the model.
+If you cannot determine a specific model, return an empty string.
+
+Return ONLY this JSON format:
+{{"results": [{{"id": 0, "model": "..."}}]}}
+
+Listings:
+{items_json}"""
+
+        try:
+            raw = await self._llm_client.chat(prompt)
+            parsed = extract_json(raw)
+            models = []
+
+            if isinstance(parsed, dict):
+                models = parsed.get("results", [])
+            elif isinstance(parsed, list):
+                models = parsed
+
+            for m in models:
+                idx = m.get("id")
+                if idx is not None and 0 <= idx < len(batch):
+                    batch[idx].product_model = m.get("model", "")
+                        
+        except Exception as e:
+            logger.error("Model extraction error", extra={"error": str(e)})
+
     async def process(self, listings: List[Any], context: Dict[str, Any]) -> List[Any]:
         """
         Extract product models from listings.
@@ -89,49 +131,18 @@ class ModelExtractor(BaseProcessor):
         if not listings:
             return listings
         
-        delay = context.get("review_delay", self._delay)
-        batch_size = 10
+        batch_size = context.get("batch_size", 10)
         
-        for i in range(0, len(listings), batch_size):
-            batch = listings[i : i + batch_size]
-            
-            items_json = json.dumps(
-                [{"id": j, "title": listing.title, "description": getattr(listing, 'description', '')[:200]} 
-                 for j, listing in enumerate(batch)],
-                ensure_ascii=False,
-            )
-
-            prompt = f"""From each listing below, extract the most specific product model name
-suitable for a Google search to find professional reviews.
-Use both the title and description to identify the model.
-If you cannot determine a specific model, return an empty string.
-
-Return ONLY this JSON format:
-{{"results": [{{"id": 0, "model": "..."}}]}}
-
-Listings:
-{items_json}"""
-
-            try:
-                raw = await self._llm_client.chat(prompt)
-                parsed = extract_json(raw)
-                models = []
-
-                if isinstance(parsed, dict):
-                    models = parsed.get("results", [])
-                elif isinstance(parsed, list):
-                    models = parsed
-
-                for m in models:
-                    idx = m.get("id")
-                    if idx is not None and 0 <= idx < len(batch):
-                        batch[idx].product_model = m.get("model", "")
-                        
-            except Exception as e:
-                logger.error("Model extraction error", extra={"error": str(e)})
-                # Continue with next batch
-            
-            if i + batch_size < len(listings):
-                await asyncio.sleep(delay)
+        # Create batches
+        batches = [
+            listings[i : i + batch_size] 
+            for i in range(0, len(listings), batch_size)
+        ]
+        
+        # Process all batches concurrently
+        await asyncio.gather(*[
+            self._process_batch(batch) 
+            for batch in batches
+        ])
         
         return listings
