@@ -445,6 +445,17 @@ body {
     font-weight: 500;
 }
 
+.card-reason {
+    margin-top: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    background: #ffe8ad;
+    color: black;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
 /* Card Hover - Review Info */
 .card-hover {
     position: absolute;

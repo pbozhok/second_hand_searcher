@@ -209,15 +209,20 @@ function renderCard(item) {
     price.textContent = formatPrice(item.price, item.currency);
     meta.appendChild(price);
     
-    // Add score display with tooltip
+    // Add score display
     if (item.score && item.score > 0) {
         const score = document.createElement('span');
         score.className = 'card-score';
         score.textContent = `★ ${item.score.toFixed(1)}`;
-        if (item.score_reason) {
-            score.title = item.score_reason;
-        }
         meta.appendChild(score);
+    }
+    
+    // Add score reason at the bottom of the card if available
+    if (item.score_reason) {
+        const reason = document.createElement('div');
+        reason.className = 'card-reason';
+        reason.textContent = item.score_reason;
+        content.appendChild(reason);
     }
     
     if (item.posted_date) {
