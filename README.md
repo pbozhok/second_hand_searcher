@@ -1,4 +1,4 @@
-m# Second-Hand Product Research Agent
+# Second-Hand Product Research Agent
 
 A powerful research assistant that scrapes, filters, and ranks second-hand product listings from multiple platforms using AI.
 
