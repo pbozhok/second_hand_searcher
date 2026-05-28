@@ -77,6 +77,7 @@ class SearchAnimation {
     this.retryCount = 0;
     this.startTime = null;
     this.eventListeners = {};
+    this.phaseTimer = null;
 
     // DOM elements (created in init)
     this.spinner = null;
@@ -210,39 +211,84 @@ class SearchAnimation {
     // Start with first phase
     this.updatePhase();
 
-    // Connect to SSE endpoint
-    this.connectSSE();
-
     // Emit phase change event
     this.emit('phaseChange', this.getPhaseEventData());
+
+    // Start client-side phase progression
+    // SSE is experimental - using client-side estimation for now
+    this.startClientSideProgression();
+  }
+
+  /**
+   * Start client-side phase progression as fallback
+   * Phases will advance automatically based on estimated durations
+   */
+  startClientSideProgression() {
+    if (!this.options.phases || !this.isAnimating) return;
+
+    // Clear any existing timer
+    if (this.phaseTimer) {
+      clearTimeout(this.phaseTimer);
+    }
+
+    const phase = this.options.phases[this.currentPhaseIndex];
+    if (!phase) return;
+
+    // Get estimated duration or use default
+    const duration = phase.estimatedDurationMs || 1000;
+
+    // Advance to next phase after duration
+    this.phaseTimer = setTimeout(() => {
+      // Only advance if still animating and not at the last phase
+      if (this.currentPhaseIndex < this.options.phases.length - 1) {
+        this.currentPhaseIndex++;
+        this.updatePhase();
+        this.emit('phaseChange', this.getPhaseEventData());
+        this.startClientSideProgression(); // Continue progression
+      }
+    }, duration);
+  }
+
+  /**
+   * Stop client-side phase progression
+   */
+  stopClientSideProgression() {
+    if (this.phaseTimer) {
+      clearTimeout(this.phaseTimer);
+      this.phaseTimer = null;
+    }
   }
 
   /**
    * Connect to SSE endpoint for real-time phase updates
+   * Falls back to client-side estimation if SSE not available
    */
   connectSSE() {
-    // Close existing connection if any
-    if (this.eventSource) {
-      this.eventSource.close();
-    }
-
+    // SSE is optional - if it fails, we use client-side estimation
+    this.sseConnected = false;
+    
     try {
-      // Construct SSE URL with search ID if available
+      // Close existing connection if any
+      if (this.eventSource) {
+        this.eventSource.close();
+      }
+
       const url = this.options.sseEndpoint;
-      
       this.eventSource = new EventSource(url);
-      this.sseConnected = true;
-      this.retryCount = 0;
 
       this.eventSource.onopen = () => {
         this.sseConnected = true;
+        this.stopClientSideProgression();
         console.log('SSE connection opened');
       };
 
       this.eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          this.handleSSEMessage(data);
+          if (data.phase) this.nextPhase(data.phase);
+          if (data.progress !== undefined) this.setProgress(data.progress);
+          if (data.error) this.error(data.error);
+          if (data.complete) this.complete();
         } catch (error) {
           console.error('Error parsing SSE message:', error);
         }
@@ -250,53 +296,13 @@ class SearchAnimation {
 
       this.eventSource.onerror = (error) => {
         this.sseConnected = false;
-        console.error('SSE connection error:', error);
-        this.attemptReconnect();
+        console.warn('SSE connection failed, using client-side estimation:', error);
       };
 
     } catch (error) {
-      console.error('SSE not supported or connection failed:', error);
+      console.warn('SSE not supported, using client-side estimation:', error);
       this.sseConnected = false;
-      // Fall back to client-side estimation
     }
-  }
-
-  /**
-   * Handle incoming SSE message with phase update
-   * @param {Object} data - Parsed message data
-   */
-  handleSSEMessage(data) {
-    if (data.phase) {
-      this.nextPhase(data.phase);
-    }
-    if (data.progress !== undefined) {
-      this.setProgress(data.progress);
-    }
-    if (data.error) {
-      this.error(data.error);
-    }
-    if (data.complete) {
-      this.complete();
-    }
-  }
-
-  /**
-   * Attempt to reconnect SSE connection
-   */
-  attemptReconnect() {
-    if (this.retryCount >= SearchAnimation.MAX_RETRIES) {
-      console.warn('Max reconnection attempts reached. Falling back to client-side estimation.');
-      return;
-    }
-
-    this.retryCount++;
-    const delay = SearchAnimation.RETRY_DELAY_MS * this.retryCount;
-    
-    setTimeout(() => {
-      if (this.isAnimating) {
-        this.connectSSE();
-      }
-    }, delay);
   }
 
   /**
@@ -415,6 +421,9 @@ class SearchAnimation {
     this.currentPhaseIndex = this.options.phases.length - 1;
     this.updatePhase();
 
+    // Stop client-side progression
+    this.stopClientSideProgression();
+
     // Close SSE connection
     this.closeSSE();
 
@@ -446,6 +455,9 @@ class SearchAnimation {
     this.phaseText.textContent = message;
     this.phaseText.classList.remove('sa-fun-message');
 
+    // Stop client-side progression
+    this.stopClientSideProgression();
+
     // Close SSE connection
     this.closeSSE();
 
@@ -468,6 +480,9 @@ class SearchAnimation {
     this.currentPhaseIndex = 0;
     this.phaseText.textContent = '';
     this.phaseText.classList.remove('sa-fun-message');
+
+    // Stop client-side progression
+    this.stopClientSideProgression();
 
     // Close SSE connection
     this.closeSSE();

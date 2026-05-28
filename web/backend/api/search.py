@@ -8,7 +8,9 @@ This module provides the main search endpoint that:
 4. Returns structured JSON responses
 """
 
+import asyncio
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -24,6 +26,9 @@ from web.shared.adapters import create_search_response, search_request_to_pipeli
 # Import existing core modules
 from core.pipeline import Pipeline, PipelineConfig
 from core.registry import registry
+
+# Import SearchProgressTracker for phase updates
+from web.backend.api.search_sse import SearchProgressTracker, active_searches
 
 # Import module packages to trigger auto-registration with registry
 import scrapers
@@ -73,6 +78,11 @@ async def search_items(
     **Note**: This endpoint runs the same search logic as the CLI,
     just formatted for web display.
     """
+    # Generate unique search ID for phase tracking
+    search_id = str(uuid.uuid4())
+    tracker = SearchProgressTracker(search_id)
+    active_searches[search_id] = tracker
+    
     # Build the search request model
     search_request = SearchRequest(
         query=query,
@@ -105,8 +115,18 @@ async def search_items(
         pipeline.load_modules()
         
         # Execute the pipeline
-        context = await pipeline.execute(pipeline_config)
+        try:
+            logger.info(f"Starting pipeline execution for search: {search_id}")
+            context = await pipeline.execute(pipeline_config)
+            logger.info(f"Pipeline completed successfully for search: {search_id}")
+        except Exception as e:
+            logger.exception(f"Pipeline execution failed for search {search_id}: {e}")
+            tracker.set_error(str(e))
+            raise
         listings = context.listings
+        
+        # Mark complete
+        tracker.complete()
         
         # Get llm_filtered count from metadata
         # BaseFilter.execute() sets {module_name}_removed, where module_name is "llm-filter" or "keyword-filter"
@@ -114,27 +134,18 @@ async def search_items(
         if context.metadata:
             llm_filtered = context.metadata.get('llm-filter_removed', 0) or context.metadata.get('keyword-filter_removed', 0)
         
-        # Handle empty results
-        if not listings:
-            logger.info(f"No results found for query: {query}")
-            return create_search_response(
-                query=query,
-                listings=[],
-                reviews={},
-                request=search_request,
-                total_results=0,
-                llm_filtered=llm_filtered
-            )
-        
-        # Create and return the response
+        # Create response data with search_id
         response = create_search_response(
             query=query,
-            listings=listings,
+            listings=listings or [],
             reviews={},
             request=search_request,
-            total_results=len(listings),
+            total_results=len(listings) if listings else 0,
             llm_filtered=llm_filtered
         )
+        
+        # Set search_id on the response model
+        response.search_id = search_id
         
         logger.info(f"Search completed: {query} -> {len(listings)} results ({llm_filtered} items filtered by LLM)")
         return response
@@ -164,6 +175,7 @@ async def search_items(
     except Exception as e:
         # Unexpected error
         logger.exception(f"Unexpected error for query '{query}': {e}")
+        tracker.set_error(str(e))
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -172,6 +184,9 @@ async def search_items(
                 details={"type": type(e).__name__, "message": str(e)}
             ).dict()
         )
+    finally:
+        # Mark tracker as complete
+        tracker.complete()
 
 
 @router.get("/search/quick", response_model=SearchResponse)

@@ -89,12 +89,13 @@ class Pipeline:
         if preprocessors:
             self._preprocessor = preprocessors[0]
     
-    async def execute(self, config: PipelineConfig) -> PipelineContext:
+    async def execute(self, config: PipelineConfig, phase_callback: Optional[Callable[[str, int, int], None]] = None) -> PipelineContext:
         """
         Execute the full pipeline with the given configuration.
         
         Args:
             config: Pipeline configuration
+            phase_callback: Optional callback function(phase_name, current_phase, total_phases)
             
         Returns:
             PipelineContext with all results and metadata
@@ -110,10 +111,18 @@ class Pipeline:
         
         logger.info("Pipeline started", extra={"query": config.query})
         
+        # Total number of phases for progress calculation
+        total_phases = 6  # initiating, fetching, filtering, ranking, loading, complete
+        current_phase = 1  # fetching
+        
         try:
             # Load modules if not already loaded
             if not self._modules:
                 self.load_modules()
+            
+            # Report phase: fetching
+            if phase_callback:
+                phase_callback("fetching", current_phase, total_phases)
             
             # Stage 0: Pre-processing (optional) - generates cleaned query and search keywords
             if not config.skip_preprocess and self._preprocessor:
@@ -129,6 +138,11 @@ class Pipeline:
             context = await self._execute_deduplicators(context)
             logger.info("Prices converted and duplicates removed", extra={"listing_count": len(context.listings)})
             
+            # Report phase: filtering
+            current_phase = 2
+            if phase_callback:
+                phase_callback("filtering", current_phase, total_phases)
+            
             # Stage 3: Filtering (1st pass) - initial relevance filtering
             # When skip_filter=True, use keyword filter; otherwise use LLM filter
             context = await self._execute_filter_pass(context, use_llm=not config.skip_filter, pass_num=1)
@@ -138,6 +152,11 @@ class Pipeline:
             # Run only description fetcher, not all processors
             context = await self._execute_description_fetchers(context)
             logger.info("Descriptions fetched", extra={"listing_count": len(context.listings)})
+            
+            # Report phase: ranking
+            current_phase = 3
+            if phase_callback:
+                phase_callback("ranking", current_phase, total_phases)
             
             # Stage 5: Filtering (2nd pass) - filtering with full descriptions
             # Use the same filter type as pass 1
@@ -161,6 +180,11 @@ class Pipeline:
                 logger.info("Listings scored and ranked", extra={"listing_count": len(context.listings)})
             else:
                 logger.info("Scoring skipped (--no-score flag)")
+            
+            # Report phase: loading
+            current_phase = 4
+            if phase_callback:
+                phase_callback("loading", current_phase, total_phases)
             
             logger.info("Pipeline completed", 
                        extra={"final_listing_count": len(context.listings), "error_count": len(context.errors)})

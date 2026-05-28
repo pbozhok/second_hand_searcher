@@ -125,15 +125,20 @@ async def stream_search_phases(
     async def event_generator():
         """Generate SSE events for phase updates."""
         try:
+            last_phase = None
             while not tracker.is_complete:
                 # Send current state
                 state = tracker.get_state()
-                yield {"data": json.dumps(state)}
                 
-                # Wait for phase changes
-                await asyncio.sleep(0.5)
+                # Only send if phase changed or progress updated
+                if last_phase != state.get('phase') or tracker.is_error:
+                    yield {"data": json.dumps(state)}
+                    last_phase = state.get('phase')
+                
+                # Short sleep for responsive updates
+                await asyncio.sleep(0.1)
             
-            # Send final state
+            # Send final complete state
             state = tracker.get_state()
             yield {"data": json.dumps(state)}
             
