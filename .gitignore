@@ -6,6 +6,13 @@
 # Agent files
 agents/
 .vibe/
+.claude/
+CLAUDE.md
+
+# Specify
+.specify/init-options.json
+.specify/integration.json
+.specify/integrations/claude.manifest.json
 
 # Testing
 .pytest_cache/
