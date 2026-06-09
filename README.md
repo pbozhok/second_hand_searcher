@@ -496,85 +496,32 @@ Results are displayed in a rich terminal table with the following columns:
 
 ## Testing
 
-The project has a **comprehensive test suite** following the Test-First principle:
+### Quick start
 
 ```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_scrapers.py
-
-# Run with verbose output
-pytest -v
-
-# Run only contract tests
-pytest tests/test_scrapers.py tests/test_filters.py tests/test_processors.py tests/test_reviewers.py tests/test_llm.py
-
-# Run only integration tests
-pytest tests/integration/
-
-# Run with test coverage
-pytest --cov=.
+make test           # backend + frontend
+make test-backend   # API and SSE sync tests only
+make test-frontend  # SearchAnimation Playwright tests only
 ```
 
-### Test Organization
+Without `make`:
 
-| Test File | Purpose | Tests |
-|-----------|---------|-------|
-| `test_scrapers.py` | Scraper contract and unit tests | 22 |
-| `test_filters.py` | Filter contract and unit tests | 20 |
-| `test_processors.py` | Processor contract and unit tests | 22 |
-| `test_reviewers.py` | Reviewer contract tests | 8 |
-| `test_llm.py` | LLM client contract tests | 21 |
-| `test_llm_config.py` | LLM configuration tests | 8 |
-| `test_pipeline.py` | Pipeline orchestrator tests | 18 |
-| `test_registry.py` | Module registry tests | 15 |
-| `integration/` | Integration tests | 18 |
+```bash
+python -m pytest web/backend/tests/ -v
+python -m pytest web/frontend/tests/ -v
+```
 
-**Total: ~150+ tests**
+### Test suites
 
-### Module Interface Tests
+| Suite | Location | What it covers |
+|-------|----------|----------------|
+| Backend | `web/backend/tests/` | Search API endpoints, SSE message format contract, phase callback behaviour |
+| Frontend | `web/frontend/tests/` | `SearchAnimation` DOM/state (Playwright/Chromium), SSE pre-connect integration |
 
-Each module type has **contract tests** that verify the interface:
+The frontend suite runs in headless Chromium via Playwright. Install the browser once if you haven't already:
 
-- `BaseScraper` → All scrapers must implement `scrape()`, `initialize()`, `validate()`, `execute()`
-- `BaseFilter` → All filters must implement `filter()`, `initialize()`, `validate()`, `execute()`
-- `BaseProcessor` → All processors must implement `process()`, `initialize()`, `validate()`, `execute()`
-- `BaseReviewer` → All reviewers must implement `review()`, `initialize()`, `validate()`, `execute()`
-- `BaseLLMClient` → All LLM clients must implement `chat()`, `initialize()`, `validate()`
-
-### Adding Tests for New Modules
-
-When adding a new module, create corresponding tests:
-
-```python
-# tests/test_my_module.py
-import pytest
-from my_module import MyModule
-from core.module import ModuleType
-
-class TestMyModuleContract:
-    def test_inherits_from_module(self):
-        assert issubclass(MyModule, Module)
-    
-    def test_has_required_attributes(self):
-        module = MyModule()
-        assert module.name == "my-module"
-        assert module.module_type == ModuleType.PROCESSOR
-        assert module.version == "1.0.0"
-    
-    def test_has_required_methods(self):
-        assert hasattr(MyModule, 'initialize')
-        assert hasattr(MyModule, 'validate')
-        assert hasattr(MyModule, 'execute')
-    
-    @pytest.mark.asyncio
-    async def test_execute_returns_context(self):
-        module = MyModule()
-        context = PipelineContext(query="test")
-        result = await module.execute(context)
-        assert isinstance(result, PipelineContext)
+```bash
+python -m playwright install chromium
 ```
 
 ## Environment Variables
