@@ -222,6 +222,11 @@ class SearchResponse(BaseModel):
         default_factory=lambda: datetime.utcnow().isoformat(),
         description="Response timestamp"
     )
+    search_id: Optional[str] = Field(
+        default=None,
+        description="Unique identifier for this search (used for SSE phase tracking)",
+        example="a1b2c3d4-5678-90ef-ghij-klmnopqrstuv"
+    )
 
 
 class ErrorResponse(BaseModel):

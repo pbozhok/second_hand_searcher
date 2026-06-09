@@ -8,7 +8,9 @@ This module provides the main search endpoint that:
 4. Returns structured JSON responses
 """
 
+import asyncio
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -24,6 +26,9 @@ from web.shared.adapters import create_search_response, search_request_to_pipeli
 # Import existing core modules
 from core.pipeline import Pipeline, PipelineConfig
 from core.registry import registry
+
+# Import SearchProgressTracker for phase updates
+from web.backend.api.search_sse import SearchProgressTracker, active_searches, get_search_tracker
 
 # Import module packages to trigger auto-registration with registry
 import scrapers
@@ -59,6 +64,7 @@ async def search_items(
     use_reviews: Optional[bool] = Query(default=True, description="Enable reviews"),
     use_scoring: Optional[bool] = Query(default=True, description="Enable scoring"),
     sort_by: Optional[str] = Query(default="score", description="Sort by: score, price_asc, price_desc, date"),
+    search_id: Optional[str] = Query(default=None, description="Optional search ID for SSE tracking"),
     pipeline: Pipeline = Depends(get_pipeline),
 ) -> SearchResponse:
     """
@@ -73,6 +79,14 @@ async def search_items(
     **Note**: This endpoint runs the same search logic as the CLI,
     just formatted for web display.
     """
+    # Use provided search_id or generate a new one
+    # Use get_search_tracker to ensure we reuse existing tracker (if SSE connected early)
+    if search_id:
+        tracker = await get_search_tracker(search_id)
+    else:
+        search_id = str(uuid.uuid4())
+        tracker = await get_search_tracker(search_id)
+    
     # Build the search request model
     search_request = SearchRequest(
         query=query,
@@ -104,9 +118,29 @@ async def search_items(
         # Load modules into pipeline
         pipeline.load_modules()
         
-        # Execute the pipeline
-        context = await pipeline.execute(pipeline_config)
+        # Build a lookup so each phase_callback call is O(1)
+        _phase_index = {p['id']: i for i, p in enumerate(SearchProgressTracker.PHASES)}
+        _n_phases = len(SearchProgressTracker.PHASES)
+
+        def phase_callback(phase_name: str, current: int, total: int):
+            idx = _phase_index.get(phase_name)
+            if idx is not None:
+                tracker.current_phase_index = idx
+                tracker.progress = int((idx + 1) / _n_phases * 100)
+        
+        # Execute the pipeline with phase callback
+        try:
+            logger.info(f"Starting pipeline execution for search: {search_id}")
+            context = await pipeline.execute(pipeline_config, phase_callback=phase_callback)
+            logger.info(f"Pipeline completed successfully for search: {search_id}")
+        except Exception as e:
+            logger.exception(f"Pipeline execution failed for search {search_id}: {e}")
+            tracker.set_error(str(e))
+            raise
         listings = context.listings
+        
+        # Mark complete
+        tracker.complete()
         
         # Get llm_filtered count from metadata
         # BaseFilter.execute() sets {module_name}_removed, where module_name is "llm-filter" or "keyword-filter"
@@ -114,34 +148,25 @@ async def search_items(
         if context.metadata:
             llm_filtered = context.metadata.get('llm-filter_removed', 0) or context.metadata.get('keyword-filter_removed', 0)
         
-        # Handle empty results
-        if not listings:
-            logger.info(f"No results found for query: {query}")
-            return create_search_response(
-                query=query,
-                listings=[],
-                reviews={},
-                request=search_request,
-                total_results=0,
-                llm_filtered=llm_filtered
-            )
-        
-        # Create and return the response
+        # Create response data with search_id
         response = create_search_response(
             query=query,
-            listings=listings,
+            listings=listings or [],
             reviews={},
             request=search_request,
-            total_results=len(listings),
+            total_results=len(listings) if listings else 0,
             llm_filtered=llm_filtered
         )
+        
+        # Set search_id on the response model
+        response.search_id = search_id
         
         logger.info(f"Search completed: {query} -> {len(listings)} results ({llm_filtered} items filtered by LLM)")
         return response
         
     except ValueError as e:
-        # Validation or configuration error
         logger.error(f"Validation error for query '{query}': {e}")
+        tracker.set_error(str(e))
         raise HTTPException(
             status_code=400,
             detail=ErrorResponse(
@@ -151,8 +176,8 @@ async def search_items(
             ).dict()
         )
     except TimeoutError as e:
-        # Search timeout
         logger.error(f"Timeout error for query '{query}': {e}")
+        tracker.set_error("Search is taking longer than usual. Please try again.")
         raise HTTPException(
             status_code=504,
             detail=ErrorResponse(
@@ -162,8 +187,8 @@ async def search_items(
             ).dict()
         )
     except Exception as e:
-        # Unexpected error
         logger.exception(f"Unexpected error for query '{query}': {e}")
+        tracker.set_error(str(e))
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
