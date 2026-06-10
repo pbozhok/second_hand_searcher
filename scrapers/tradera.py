@@ -73,7 +73,7 @@ class TraderaScraper(BaseScraper):
                 zero_price = [l for l in listings if l.price == 0]
                 if zero_price:
                     self.log_debug(f"[yellow]Tradera: fetching detail pages for {len(zero_price)} zero-price items[/yellow]")
-                    sem = asyncio.Semaphore(8)
+                    sem = asyncio.Semaphore(15)
                     await asyncio.gather(
                         *[self._fetch_detail_price(s, listing, sem) for listing in zero_price],
                         return_exceptions=True,

@@ -56,7 +56,7 @@ DEFAULT_CURRENCY = "EUR"
 SCRAPER_TIMEOUT = 20  # seconds
 MAX_RETRIES = 5
 BATCH_SIZE = 60  # For LLM filtering
-DELAY_BETWEEN_BATCHES = 2.0 # seconds
+DELAY_BETWEEN_BATCHES = 0.5  # seconds
 DEFAULT_MAX_RESULTS = 40  # Default max results per scraper
 
 # ── Query Processing Configuration ────────────────────────────────────────────
@@ -91,7 +91,7 @@ class WebConfig:
     MAX_CONCURRENT_SEARCHES = 10
     
     # Timeouts
-    SEARCH_TIMEOUT_SECONDS = 30
+    SEARCH_TIMEOUT_SECONDS = 300
 
 
 # Web configuration instance

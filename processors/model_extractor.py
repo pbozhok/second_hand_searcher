@@ -140,6 +140,6 @@ Listings:
         for i, batch in enumerate(batches):
             await self._process_batch(batch)
             if i < len(batches) - 1:
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(0.5)
         
         return listings

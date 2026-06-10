@@ -4,6 +4,7 @@ Base scraper class with common functionality for all platform scrapers.
 All scrapers must inherit from this class which implements the Module interface.
 """
 
+import asyncio
 from abc import abstractmethod
 from typing import Optional, List, Dict, Any
 
@@ -105,14 +106,16 @@ class BaseScraper(Module):
             # Check if there are multiple search queries in metadata
             search_queries = context.get_metadata("search_queries")
             if search_queries and isinstance(search_queries, list):
-                # Use all search queries
+                # Run all keyword searches concurrently
+                max_res = context.config.get("max_results", config.DEFAULT_MAX_RESULTS)
+                results = await asyncio.gather(
+                    *[self.scrape(q, max_res) for q in search_queries],
+                    return_exceptions=True,
+                )
                 all_listings = []
-                for query in search_queries:
-                    listings = await self.scrape(
-                        query,
-                        context.config.get("max_results", config.DEFAULT_MAX_RESULTS)
-                    )
-                    all_listings.extend(listings)
+                for result in results:
+                    if isinstance(result, list):
+                        all_listings.extend(result)
                 context.add_listings(all_listings)
                 context.set_metadata(f"{self.name}_count", len(all_listings))
             else:

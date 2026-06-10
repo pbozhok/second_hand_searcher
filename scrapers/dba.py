@@ -17,7 +17,7 @@ import config
 from core.logging import get_logger
 from core.module import ModuleType
 
-_DETAIL_CONCURRENCY = 8  # max simultaneous detail-page requests
+_DETAIL_CONCURRENCY = 15  # max simultaneous detail-page requests
 
 
 def _parse_dba_date(date_str: str) -> str:
