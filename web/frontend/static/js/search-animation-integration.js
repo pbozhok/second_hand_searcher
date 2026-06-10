@@ -120,13 +120,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Override hideLoading
         window.hideLoading = function() {
+            // Complete the animation if still running — SSE complete event may not
+            // arrive before the fetch resolves and closes the connection.
+            if (searchAnimation && searchAnimation.isAnimating && !searchAnimation.isError) {
+                searchAnimation.complete();
+            }
+
             // Close SSE connection
             closeSSEConnection();
-            
+
             // Hide old loading indicator
             const oldLoading = document.getElementById('loading-indicator');
             if (oldLoading) oldLoading.style.display = 'none';
-            
+
             // Call original if it exists
             if (originalHideLoading) originalHideLoading();
         };

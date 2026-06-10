@@ -59,7 +59,7 @@ class ModelExtractor(BaseProcessor):
         self._delay = config.get("review_delay", 4.0)
         
         try:
-            self._llm_client = get_client(self.llm_backend)
+            self._llm_client = get_client(self.llm_backend, model="mistral-small-latest")
             logger.info("ModelExtractor initialized", extra={"llm_backend": self.llm_backend})
             return True
         except Exception as e:
@@ -83,7 +83,7 @@ class ModelExtractor(BaseProcessor):
             batch: List of listings in this batch
         """
         items_json = json.dumps(
-            [{"id": j, "title": listing.title, "description": getattr(listing, 'description', '')[:200]} 
+            [{"id": j, "title": listing.title, "description": getattr(listing, 'description', '')[:100]}
              for j, listing in enumerate(batch)],
             ensure_ascii=False,
         )
@@ -131,15 +131,16 @@ Listings:
         if not listings:
             return listings
         
-        batch_size = max(10, context.get("batch_size", context.get("BATCH_SIZE", 30)))
-        
+        batch_size = max(10, context.get("batch_size", context.get("BATCH_SIZE", 60)))
+
         batches = [listings[i: i + batch_size] for i in range(0, len(listings), batch_size)]
 
-        # Process sequentially to avoid bursting the LLM rate limit.
-        # A short delay between batches gives the API headroom to recover.
-        for i, batch in enumerate(batches):
-            await self._process_batch(batch)
-            if i < len(batches) - 1:
-                await asyncio.sleep(1.5)
+        sem = asyncio.Semaphore(3)  # max 3 concurrent LLM calls
+
+        async def process_guarded(batch: list) -> None:
+            async with sem:
+                await self._process_batch(batch)
+
+        await asyncio.gather(*[process_guarded(b) for b in batches])
         
         return listings
