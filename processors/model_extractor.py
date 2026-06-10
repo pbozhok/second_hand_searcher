@@ -59,7 +59,7 @@ class ModelExtractor(BaseProcessor):
         self._delay = config.get("review_delay", 4.0)
         
         try:
-            self._llm_client = get_client(self.llm_backend)
+            self._llm_client = get_client(self.llm_backend, model="mistral-small-latest")
             logger.info("ModelExtractor initialized", extra={"llm_backend": self.llm_backend})
             return True
         except Exception as e:
@@ -83,7 +83,7 @@ class ModelExtractor(BaseProcessor):
             batch: List of listings in this batch
         """
         items_json = json.dumps(
-            [{"id": j, "title": listing.title, "description": getattr(listing, 'description', '')[:200]} 
+            [{"id": j, "title": listing.title, "description": getattr(listing, 'description', '')[:100]}
              for j, listing in enumerate(batch)],
             ensure_ascii=False,
         )

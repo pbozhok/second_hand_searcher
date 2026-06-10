@@ -185,9 +185,10 @@ class MistralClient(LLMClient):
     module_type = None  # LLM clients are service objects, not pipeline stages
     version: str = "1.0.0"
     
-    def __init__(self):
+    def __init__(self, model: str = "mistral-medium-3-5"):
         """Initialize Mistral client, checking API key and library availability."""
         super().__init__()
+        self.model = model
         try:
             from mistralai.client import Mistral
             self.mistral_module = Mistral
@@ -211,7 +212,7 @@ class MistralClient(LLMClient):
                 async with _get_mistral_sem():
                     async with self.mistral_module(api_key=self.api_key) as mistral:
                         res = await mistral.chat.complete_async(
-                            model="mistral-medium-3-5",
+                            model=self.model,
                             messages=[{"role": "user", "content": prompt}],
                             response_format={"type": "text"},
                             temperature=temperature,
@@ -246,7 +247,7 @@ class MistralClient(LLMClient):
         return ""
 
 
-def get_client(backend: str = "gemini") -> LLMClient:
+def get_client(backend: str = "gemini", model: str = None) -> LLMClient:
     """
     Factory function to get the appropriate LLM client.
     
@@ -257,6 +258,6 @@ def get_client(backend: str = "gemini") -> LLMClient:
         An instance of the appropriate LLM client
     """
     if backend == "mistral":
-        return MistralClient()
+        return MistralClient(model=model) if model else MistralClient()
     else:
         return GeminiClient()

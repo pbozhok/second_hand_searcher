@@ -59,7 +59,7 @@ class LLMFilter(BaseFilter):
         self.debug = config.get("debug", False)
         
         try:
-            self._llm_client = get_client(self.llm_backend)
+            self._llm_client = get_client(self.llm_backend, model="mistral-small-latest")
             logger.info("LLMFilter initialized", extra={"llm_backend": self.llm_backend})
             return True
         except Exception as e:
@@ -95,7 +95,7 @@ class LLMFilter(BaseFilter):
         async def judge_batch(batch: list, user_query: str) -> None:
             items_json = json.dumps(
                 [
-                    {"id": i, "title": getattr(l, 'title', ''), "description": getattr(l, 'description', '')[:400]}
+                    {"id": i, "title": getattr(l, 'title', ''), "description": getattr(l, 'description', '')[:150]}
                     for i, l in enumerate(batch)
                 ],
                 ensure_ascii=False,
